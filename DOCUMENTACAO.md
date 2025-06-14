@@ -14,6 +14,7 @@ Este documento visa fornecer uma visão completa da arquitetura, implementação
 - [8. Gerenciamento de Dados com Google Drive](#8-gerenciamento-de-dados-com-google-drive)
 - [9. Manual de Implantação com Docker](#9-manual-de-implantação-com-docker)
 - [10. Manual de Uso da API com Flutter](#10-manual-de-uso-da-api-com-flutter)
+- [11. Manual de Treinamento de Modelos de Detecção de Bocha](#11-manual-de-treinamento-de-modelos-de-detecção-de-bocha)
 
 
 ## 1. Visão Geral do Projeto
@@ -1266,3 +1267,221 @@ Para desenhar as coordenadas sobre a imagem original (cuja URL é retornada), vo
 *   **Interação com GCS:** Lembre-se que os endpoints `/url` e `/coordinates` dependem do upload para o Google Cloud Storage. Se as credenciais não estiverem configuradas no backend Docker (o que geralmente não é o caso para um setup local simples), essas partes podem falhar, e as URLs retornadas podem não ser válidas ou os endpoints podem retornar erros.
 
 Este manual deve fornecer uma base sólida para consumir a API de reconhecimento de bocha a partir de uma aplicação Flutter.
+
+## 11. Manual de Treinamento de Modelos de Detecção de Bocha
+
+Este manual detalha o processo de treinamento de modelos customizados de detecção de objetos para o projeto Juiz de Bocha Eletrônico, utilizando a plataforma Detectron2. Treinar seu próprio modelo permite que o sistema reconheça com precisão os tipos específicos de bolas de bocha e o bolim que você utiliza.
+
+### Introdução ao Treinamento Customizado
+
+A detecção de objetos é uma tarefa de visão computacional que envolve identificar a presença e a localização de múltiplos objetos em uma imagem, geralmente desenhando caixas delimitadoras (bounding boxes) ao redor deles e classificando-os.
+
+Embora existam modelos pré-treinados em grandes datasets (como COCO), eles podem não ser otimizados para a tarefa específica de detectar bolas de bocha com as cores e aparências do seu conjunto. Treinar um modelo customizado com suas próprias imagens e anotações geralmente leva a um desempenho superior.
+
+Utilizamos o **Detectron2**, uma biblioteca do Facebook AI Research (FAIR) construída sobre o PyTorch, para o treinamento. Ele espera que os dados de treinamento estejam no formato **COCO JSON**.
+
+### Fase 1: Preparação do Dataset
+
+A qualidade do seu dataset é o fator mais crucial para o sucesso do treinamento.
+
+#### 1.1 Coleta e Organização das Imagens
+
+*   **Diversidade:** Colete imagens que representem a variedade de cenários em que o jogo de bocha ocorre:
+    *   Diferentes condições de iluminação (sol, sombra, luz artificial).
+    *   Diferentes fundos e tipos de quadra.
+    *   Diferentes ângulos e distâncias das bolas.
+    *   Bolas parcialmente ocluídas (se relevante para seu caso de uso).
+*   **Quantidade:** Comece com algumas centenas de imagens por classe de objeto que você deseja detectar. Para um bom desempenho, muitas vezes são necessárias milhares de imagens.
+*   **Formato:** Use formatos comuns como JPEG ou PNG.
+*   **Organização:** Crie uma estrutura de pastas para suas imagens. Por exemplo:
+    ```
+    meu_projeto_bocha/
+    └── raw_images/
+        ├── img_001.jpg
+        ├── img_002.jpg
+        └── ...
+    ```
+
+#### 1.2 Anotação de Imagens
+
+Anotar significa desenhar caixas delimitadoras (bounding boxes) ao redor de cada objeto de interesse em cada imagem e atribuir uma classe a ele.
+
+*   **Ferramentas de Anotação:**
+    *   **LabelImg (Recomendado para Bounding Boxes):** Popular, fácil de usar, salva anotações no formato XML Pascal VOC ou YOLO. ([Download LabelImg](https://github.com/tzutalin/labelImg)).
+    *   **LabelMe:** Permite anotações mais complexas, incluindo polígonos para segmentação de instância. Salva em formato JSON próprio. ([LabelMe Online ou Desktop](http://labelme.csail.mit.edu/Release3.0/)).
+    *   **CVAT (cvat.ai):** Ferramenta online poderosa, suporta colaboração e vários formatos.
+    *   **VoTT (Visual Object Tagging Tool):** Da Microsoft, suporta vários formatos.
+*   **O Que Anotar:**
+    *   Desenhe uma caixa delimitadora (ou polígono, se for fazer segmentação) o mais justa possível ao redor de cada bola de bocha e do bolim.
+    *   Se as bolas tiverem cores distintas que você quer que o modelo diferencie, crie classes separadas para elas.
+*   **Definição de Classes:**
+    *   Escolha nomes de classes descritivos e consistentes. Por exemplo:
+        *   `bolim` (para a bola alvo pequena)
+        *   `bola_vermelha`
+        *   `bola_azul`
+        *   `bola_amarela`
+        *   (etc., dependendo das cores do seu jogo)
+    *   **Importante:** O `recognizer.py` atual está configurado para a classe genérica `"sports ball"` (definida em `_metadata.get("thing_classes") or ['sports ball']`). Se você treinar com classes específicas (ex: `bola_vermelha`), você precisará:
+        1.  Garantir que o arquivo de configuração YAML do seu modelo treinado (que o `Recognizer` carrega) tenha os metadados corretos com essas classes.
+        2.  Ou, modificar o `Recognizer` para usar as classes do seu modelo treinado, ou ter uma lógica para mapear as classes detectadas para uma categoria geral se necessário. Para a API atual, se você treinar com classes específicas, o `Recognizer` provavelmente listará essas classes específicas na saída.
+*   **Salvar Anotações:** Salve as anotações no formato nativo da ferramenta escolhida, em um diretório separado. Exemplo com LabelImg (XML):
+    ```
+    meu_projeto_bocha/
+    ├── raw_images/
+    │   └── ...
+    └── annotations_xml/
+        ├── img_001.xml
+        ├── img_002.xml
+        └── ...
+    ```
+
+#### 1.3 Estrutura de Diretórios e Divisão Treino/Validação
+
+Após a anotação, você precisará organizar seus dados para o script de conversão e para o treinamento. O script `train_custom_dataset/2_generate_labels_files.py` espera uma estrutura específica (que ele mesmo pode ajudar a criar ou que você precisa preparar para ele).
+
+É crucial dividir seu dataset em pelo menos dois (idealmente três) subconjuntos:
+*   **Treinamento (Train):** Usado para treinar o modelo (aprender os padrões). Geralmente 70-80% dos dados.
+*   **Validação (Val/Validation):** Usado durante o treinamento para avaliar o desempenho do modelo em dados não vistos e para ajuste de hiperparâmetros. Geralmente 10-15%.
+*   **Teste (Test):** Usado após o treinamento para uma avaliação final e imparcial do desempenho do modelo. Geralmente 10-15%. (O Detectron2 usa "TEST" nos arquivos de config para o conjunto de validação durante o treinamento).
+
+**Exemplo de estrutura que o `2_generate_labels_files.py` pode gerar ou esperar:**
+(Este script é crucial e seu funcionamento exato precisa ser bem compreendido pelo usuário)
+```
+meu_dataset_bocha_coco/  <-- Diretório de saída do script de conversão
+├── train/
+│   ├── _annotations.coco.json  (JSON COCO para treino)
+│   └── images/ (Todas as imagens de treino copiadas/lincadas aqui)
+│       ├── img_001.jpg
+│       └── ...
+└── valid/
+    ├── _annotations.coco.json  (JSON COCO para validação)
+    └── images/ (Todas as imagens de validação copiadas/lincadas aqui)
+        ├── img_abc.jpg
+        └── ...
+```
+*Nota: O script `2_generate_labels_files.py` no repositório parece gerar `juiz_de_bocha_train.json` e `juiz_de_bocha_val.json` em um diretório e uma subpasta `data/` para todas as imagens. A documentação precisa refletir o comportamento exato desse script.*
+
+### Fase 2: Conversão para o Formato COCO JSON
+
+O Detectron2 espera anotações no formato COCO. Se sua ferramenta de anotação não exporta diretamente para COCO, você precisará de um script de conversão.
+
+*   **Usando `train_custom_dataset/2_generate_labels_files.py`:**
+    *   **Finalidade:** Este script parece ser projetado para pegar anotações de um formato (provavelmente XML do LabelImg, dado o contexto comum de tais scripts) e convertê-las para arquivos JSON no formato COCO, além de organizar as imagens.
+    *   **Como Usar:** (Esta parte precisa ser detalhada com base no funcionamento real do script. Supondo que ele peça um diretório de imagens e um diretório de anotações XML).
+        ```bash
+        python train_custom_dataset/2_generate_labels_files.py --images_dir path/to/raw_images --annotations_dir path/to/annotations_xml --output_dir path/to/output_coco_dataset --train_split 0.8
+        ```
+        *(Os argumentos acima são exemplos e precisam ser confirmados com o script real).*
+    *   **Estrutura de Saída Esperada:** O script deve gerar os arquivos `juiz_de_bocha_train.json` e `juiz_de_bocha_val.json` e uma pasta `data/` (ou similar) contendo as imagens, tudo dentro do `--output_dir` especificado. Esta estrutura de saída é o que o `train_custom_dataset/register_datasets.py` espera.
+
+### Fase 3: Registro do Dataset no Detectron2
+
+Para que o Detectron2 possa usar seu dataset, ele precisa ser "registrado".
+
+*   **Editando `train_custom_dataset/register_datasets.py` (Recomendado):**
+    *   Este script já possui uma estrutura para registrar datasets no formato COCO.
+    *   Você precisará modificar a variável `dataset_dir` no topo do script para apontar para o diretório que contém seus arquivos `juiz_de_bocha_train.json`, `juiz_de_bocha_val.json` e a subpasta `data/` com as imagens (ou seja, o `--output_dir` da etapa anterior).
+        ```python
+        # Exemplo de modificação em train_custom_dataset/register_datasets.py
+        # ... (comentários e instruções já adicionados em um passo anterior) ...
+        dataset_dir = 'path/to/output_coco_dataset'  # <--- MODIFIQUE AQUI
+        classes = ["bolim", "bola_vermelha", "bola_azul"] # <--- MODIFIQUE AQUI para suas classes exatas
+
+        def juiz_de_bocha_custom():
+            register_coco_instances(
+                name="juiz_de_bocha_train", # Nome para o dataset de treino
+                metadata=dict(thing_classes=classes),
+                json_file=f'{dataset_dir}/juiz_de_bocha_train.json',
+                image_root=f'{dataset_dir}/data', # Caminho para a pasta com TODAS as imagens
+            )
+            register_coco_instances(
+                name="juiz_de_bocha_val",   # Nome para o dataset de validação
+                metadata=dict(thing_classes=classes),
+                json_file=f'{dataset_dir}/juiz_de_bocha_val.json',
+                image_root=f'{dataset_dir}/data',
+            )
+        ```
+    *   **Importância da variável `classes`:** Esta lista DEVE conter os nomes exatos das classes que você usou durante a anotação e que estão presentes nos seus arquivos JSON COCO. A ordem também pode ser importante. O Detectron2 mapeará essas classes para IDs numéricos (0, 1, 2...).
+
+*   **Editando `train/register_datasets.py`:**
+    *   Se você estiver adaptando o fluxo de treinamento principal, as modificações são similares, ajustando `annotations_dir`, `train_images_dir`, `val_images_dir`, e `classes`.
+
+### Fase 4: Configuração do Treinamento
+
+O treinamento no Detectron2 é controlado por arquivos de configuração YAML.
+
+*   **Escolha um Arquivo YAML Base:**
+    *   Você pode encontrar configurações base no diretório `models/` do projeto Detectron2 ou usar um dos arquivos fornecidos neste projeto (ex: `models/mask_rcnn_juiz_de_bocha_custom/mask_rcnn_juiz_de_bocha.yaml`) como ponto de partida.
+    *   Copie o arquivo YAML escolhido para um novo local ou renomeie-o para seu experimento específico.
+
+*   **Principais Parâmetros a Ajustar no Arquivo YAML:**
+    *   `MODEL.WEIGHTS`:
+        *   Para iniciar o treinamento a partir de pesos pré-treinados em um dataset grande como o COCO (recomendado para melhor convergência, "transfer learning"), use um caminho para um arquivo `.pkl` de modelo do Detectron2 Model Zoo. Ex: `detectron2://ImageNetPretrained/MSRA/R-50.pkl` ou `detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl`.
+        *   Se você está resumindo um treinamento anterior, aponte para o arquivo `model_final.pkl` (ou `last_checkpoint`) no `OUTPUT_DIR` daquele treinamento.
+        *   Para treinar do zero (não recomendado a menos que tenha um dataset muito grande), você pode omitir ou deixar vazio.
+    *   `MODEL.ROI_HEADS.NUM_CLASSES`: **Este é o parâmetro mais crítico.** Deve ser igual ao número de classes que você definiu na sua lista `classes` no script `register_datasets.py`.
+    *   `DATASETS.TRAIN`: Tupla com o nome do seu dataset de treinamento registrado. Ex: `("juiz_de_bocha_train",)`
+    *   `DATASETS.TEST`: Tupla com o nome do seu dataset de validação/teste registrado. Ex: `("juiz_de_bocha_val",)`
+    *   `SOLVER.IMS_PER_BATCH`: Número de imagens por batch de treinamento. Ajuste de acordo com a memória da sua GPU. Valores comuns: 2, 4, 8, 16.
+    *   `SOLVER.BASE_LR`: Taxa de aprendizado inicial. Valores comuns: 0.001, 0.0025, 0.005, 0.01. Pode precisar de ajuste.
+    *   `SOLVER.MAX_ITER`: Número total de iterações de treinamento. Ex: 3000, 5000, 10000, 40000. Depende do tamanho do dataset e da convergência.
+    *   `SOLVER.STEPS`: Iterações em que a taxa de aprendizado é reduzida (decaimento da taxa de aprendizado). Ex: `(20000, 30000)` se `MAX_ITER` for 40000. Deixe vazio `()` para não ter decaimento por steps, ou ajuste.
+    *   `DATALOADER.NUM_WORKERS`: Número de processos para carregar dados. Ex: 2, 4.
+    *   `OUTPUT_DIR`: Caminho para o diretório onde os checkpoints do modelo, logs e saídas de avaliação serão salvos. Ex: `"./output_treinamento_bocha"`
+
+### Fase 5: Execução do Treinamento
+
+Com o dataset preparado e registrado, e o arquivo YAML configurado:
+
+*   **Script de Treinamento:**
+    *   Use o script `train_custom_dataset/3_train.py` ou `train/train.py`.
+    *   Verifique se o script `train.py` que você está usando carrega o arquivo YAML correto:
+        ```python
+        # Exemplo em train.py
+        cfg = get_cfg()
+        cfg.merge_from_file("caminho/para/seu/arquivo_config_bocha.yaml") # <--- VERIFIQUE ESTE CAMINHO
+        # ... outras configurações de cfg ...
+        ```
+*   **Comando para Iniciar o Treinamento (Exemplo):**
+    (Assumindo que você está no diretório raiz do projeto e seu ambiente Python com Detectron2 está ativo)
+    ```bash
+    python train_custom_dataset/3_train.py
+    # Ou, se o script de treino aceitar o config-file como argumento (comum nos exemplos do Detectron2):
+    # python detectron2-tools/train_net.py --config-file caminho/para/seu/arquivo_config_bocha.yaml
+    ```
+    *O script `train_custom_dataset/3_train.py` parece carregar o YAML internamente, então o primeiro comando é mais provável.*
+*   **Monitoramento:**
+    *   O Detectron2 imprimirá logs no terminal, incluindo loss (perda) de treinamento, taxa de aprendizado, e métricas de avaliação no conjunto de validação (ex: AP, AP50) em intervalos regulares.
+    *   Se o TensorBoard estiver configurado (geralmente é por padrão), você pode iniciá-lo para visualizar as curvas de aprendizado:
+        ```bash
+        tensorboard --logdir ./caminho_para_seu_OUTPUT_DIR
+        ```
+        E acesse `http://localhost:6006` no seu navegador.
+
+### Fase 6: Avaliação e Uso do Modelo Treinado
+
+*   **Localização do Modelo Salvo:**
+    *   Após o término do treinamento, o modelo final (e checkpoints intermediários) serão salvos no diretório que você especificou como `OUTPUT_DIR` no seu arquivo YAML.
+    *   O modelo treinado geralmente é chamado `model_final.pkl`.
+*   **Avaliação:**
+    *   O Detectron2 geralmente executa a avaliação no conjunto `DATASETS.TEST` ao final do treinamento e periodicamente. As métricas (AP, AP50, etc.) são impressas e salvas.
+    *   Você pode usar `detectron2-tools/visualize_json_results.py` se salvou predições em formato JSON COCO.
+*   **Como Usar o Novo Modelo na API `app_recognizer`:**
+    1.  Copie o arquivo `.pkl` do seu modelo treinado (ex: `output_treinamento_bocha/model_final.pkl`) para a pasta que a API espera. Se estiver usando a integração com Google Drive para modelos, suba-o para a pasta `models` no seu Drive e nomeie-o como `weights.pkl`. Em seguida, rode `python gdrive_download.py --type models`. Se estiver configurando manualmente, copie-o para `./models_from_gdrive/weights.pkl`.
+    2.  Copie o arquivo de configuração YAML que você usou para treinar este modelo (ou uma versão dele apenas com as seções `MODEL` e `INPUT` relevantes para inferência) para o mesmo local e nomeie-o como `config.yaml`.
+    3.  Se a API `app_recognizer` estiver rodando via Docker Compose, reinicie o serviço para que ele carregue os novos arquivos de modelo:
+        ```bash
+        docker-compose restart app_recognizer
+        # Ou, se precisar reconstruir a imagem (improvável se apenas trocou modelos via volumes):
+        # docker-compose up -d --build app_recognizer
+        ```
+
+### Dicas e Boas Práticas
+
+*   **Comece Pequeno:** Se é sua primeira vez, comece com um subconjunto menor do seu dataset e poucas iterações para verificar se todo o pipeline funciona.
+*   **Aumento de Dados (Data Augmentation):** O Detectron2 aplica automaticamente algumas técnicas de aumento de dados (como flipping horizontal). Você pode configurar mais no arquivo YAML se necessário.
+*   **Ajuste de Hiperparâmetros:** A taxa de aprendizado, o tamanho do batch e o número de iterações são os hiperparâmetros mais comuns a serem ajustados. Pode ser necessário experimentar.
+*   **Overfitting:** Monitore a loss de treinamento e validação. Se a loss de treinamento continua caindo mas a de validação começa a subir (ou as métricas de AP na validação pioram), seu modelo pode estar sofrendo overfitting.
+*   **Hardware:** Treinar modelos de detecção de objetos é intensivo computacionalmente e geralmente requer uma GPU NVIDIA com CUDA para ser feito em tempo razoável.
+
+Este manual deve fornecer um guia sólido para treinar seus próprios modelos de detecção de bocha. Boa sorte!

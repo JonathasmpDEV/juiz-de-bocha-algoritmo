@@ -9,4 +9,5 @@
   - [Gerenciamento de Dados com Google Drive](DOCUMENTACAO.md#8-gerenciamento-de-dados-com-google-drive)
   - [9. Manual de Implantação](DOCUMENTACAO.md#9-manual-de-implantação-com-docker)
   - [10. Manual API Flutter](DOCUMENTACAO.md#10-manual-de-uso-da-api-com-flutter)
+  - [11. Manual de Treinamento](DOCUMENTACAO.md#11-manual-de-treinamento-de-modelos-de-detecção-de-bocha)
   - [Configurar Google Drive (JSON)](config_gdrive.md)
