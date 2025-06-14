@@ -11,7 +11,6 @@ Este documento visa fornecer uma visão completa da arquitetura, implementação
 - [5. Servindo o Modelo com Google Cloud Run (`cloud-run-function/`)](#5-servindo-o-modelo-com-google-cloud-run-cloud-run-function)
 - [6. Estrutura de Diretórios do Projeto](#6-estrutura-de-diretórios-do-projeto)
 
-**(Esta documentação está em desenvolvimento.)**
 
 ## 1. Visão Geral do Projeto
 
@@ -63,13 +62,9 @@ Esta seção descreve os passos para configurar o ambiente de desenvolvimento lo
 
 ### Passos para Configuração
 
-1.  **Clonar o Repositório (se ainda não o fez):**
-    ```bash
-    git clone <URL_DO_REPOSITORIO>
-    cd <NOME_DO_DIRETORIO_DO_PROJETO>
-    ```
+Após clonar o repositório e navegar para o diretório do projeto, siga estes passos:
 
-2.  **Criar e Ativar um Ambiente Virtual (Recomendado):**
+1.  **Criar e Ativar um Ambiente Virtual (Recomendado):**
     É uma boa prática usar ambientes virtuais para isolar as dependências do projeto.
     ```bash
     python -m venv venv
@@ -85,7 +80,7 @@ Esta seção descreve os passos para configurar o ambiente de desenvolvimento lo
         ```
     Você saberá que o ambiente virtual está ativo pelo prefixo `(venv)` no seu terminal.
 
-3.  **Instalar PyTorch:**
+2.  **Instalar PyTorch:**
     O projeto utiliza PyTorch. Recomenda-se instalar uma versão compatível com CUDA se você tiver uma GPU NVIDIA para acelerar o treinamento e a inferência. Caso contrário, a versão CPU pode ser usada.
 
     *   **Com Suporte a CUDA (exemplo para CUDA 11.3 e PyTorch 1.10.1, ajuste conforme sua GPU e o `README.MD`):**
@@ -98,7 +93,7 @@ Esta seção descreve os passos para configurar o ambiente de desenvolvimento lo
         ```
     Consulte o `README.MD` principal e o `cloud-run-function/README.MD` para as versões exatas e os links de download do PyTorch, pois podem variar dependendo da configuração (CPU/GPU) e atualizações do Detectron2.
 
-4.  **Instalar Detectron2:**
+3.  **Instalar Detectron2:**
     Após o PyTorch, instale o Detectron2.
     *   **Com Suporte a CUDA (exemplo para CUDA 11.3 e PyTorch 1.10, ajuste conforme sua GPU e o `README.MD`):**
         ```bash
@@ -109,17 +104,18 @@ Esta seção descreve os passos para configurar o ambiente de desenvolvimento lo
         pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.10/index.html
         ```
 
-5.  **Instalar Outras Dependências:**
-    O projeto possui um arquivo `requirements.txt` que lista as demais bibliotecas Python necessárias.
-    ```bash
-    pip install -r requirements.txt
-    ```
-    Pode haver também um `requirements.txt` específico dentro de `cloud-run-function/` para as dependências da função em nuvem. Se estiver trabalhando especificamente com ela, instale-o também:
-    ```bash
-    pip install -r cloud-run-function/requirements.txt
-    ```
+4.  **Instalar Outras Dependências:**
+    O projeto utiliza dois arquivos `requirements.txt` principais:
+    *   `requirements.txt` (na raiz): Contém as dependências para desenvolvimento geral, treinamento de modelos e execução de scripts locais. Instale com:
+        ```bash
+        pip install -r requirements.txt
+        ```
+    *   `cloud-run-function/requirements.txt`: Contém as dependências específicas para o ambiente de execução da função em Google Cloud Run. Este pode ser um subconjunto do principal e pode especificar versões de CPU de bibliotecas para otimizar a imagem Docker. Se estiver trabalhando diretamente com a função em nuvem ou construindo sua imagem, instale-o no ambiente apropriado:
+        ```bash
+        pip install -r cloud-run-function/requirements.txt
+        ```
 
-6.  **Verificação (Opcional):**
+5.  **Verificação (Opcional):**
     Para verificar se o Detectron2 foi instalado corretamente, você pode tentar importar a biblioteca em um interpretador Python:
     ```python
     import detectron2
@@ -173,6 +169,7 @@ A seguir, uma descrição dos métodos mais importantes da classe:
     *   Configura o dispositivo de processamento (`cfg.MODEL.DEVICE`) para CPU ou GPU.
     *   Cria uma instância do `DefaultPredictor` do Detectron2, que é o objeto responsável por realizar as predições.
     *   Carrega os metadados do dataset (usado para obter nomes de classes).
+    *   Define `self._class_names` a partir dos metadados (`metadata.get("thing_classes")`). Estes são os nomes das categorias de objetos que o modelo foi treinado para detectar (ex: 'bola_vermelha', 'bolim'). Inclui um fallback para `['sports ball']` caso os `thing_classes` não sejam encontrados nos metadados, útil para modelos genéricos ou como um padrão de segurança.
 
 *   **`read_file(file_path_or_bytesio) -> np.ndarray`** (Método Estático)
     *   Lê um arquivo de imagem. O argumento `file` pode ser uma string com o caminho para o arquivo ou um objeto `io.BytesIO` (útil para ler imagens de uploads web, por exemplo).
@@ -289,7 +286,7 @@ O script `train/train.py` é o ponto de entrada para iniciar o processo de trein
     cfg.SOLVER.BASE_LR = 0.005  # Taxa de aprendizado inicial
     cfg.SOLVER.MAX_ITER = 15000  # Número máximo de iterações de treinamento
     cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 128 # Número de ROIs por imagem durante o treino
-    # cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3 # Ajustar conforme o número de classes do seu dataset
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3  # IMPORTANTE: Descomente e ajuste este valor para o número exato de classes do seu dataset!
     cfg.OUTPUT_DIR = './train/training/' # Diretório para salvar os modelos e logs
     ```
     É crucial ajustar `MODEL.ROI_HEADS.NUM_CLASSES` para o número correto de categorias de objetos que seu modelo precisa detectar (ex: bola vermelha, bola azul, bolim = 3 classes).
@@ -323,7 +320,7 @@ Estes arquivos YAML são cruciais, pois definem a arquitetura do modelo, os data
 O diretório `detectron2-tools/` contém scripts fornecidos pelo Detectron2 que são úteis:
 
 *   `analyze_model.py`: Para analisar FLOPs, parâmetros e ativações de um modelo.
-*   `visualize_data.py`: Para visualizar las anotações do dataset ou os dados após o pré-processamento/aumentations.
+*   `visualize_data.py`: Para visualizar as anotações do dataset ou os dados após o pré-processamento/aumentations.
 *   `visualize_json_results.py`: Para visualizar os resultados de detecção salvos em formato JSON.
 *   Consulte `detectron2-tools/README.md` para mais detalhes sobre cada ferramenta.
 
@@ -457,11 +454,7 @@ O `README.MD` também fornece comandos para construir e rodar a imagem Docker lo
 
 ### Visualização de Logs
 
-Para monitorar a função e diagnosticar problemas, você pode visualizar os logs usando `gcloud`:
-```bash
-gcloud functions logs read --limit 50 --project juizdebocha --region southamerica-east1 <NOME_DO_SERVICO_OU_FUNCAO>
-```
-Substitua `<NOME_DO_SERVICO_OU_FUNCAO>` pelo nome do seu serviço Cloud Run (ex: `recognizer`) ou da função Cloud Function, se aplicável (o `README.MD` parece misturar logs de Cloud Functions, mas o deploy é para Cloud Run). Para Cloud Run, os logs são acessíveis através do Google Cloud Console na seção de Logging ou diretamente na página do serviço Cloud Run.
+Para monitorar a função e diagnosticar problemas, você pode visualizar os logs. Para Cloud Run, os logs são acessíveis através do Google Cloud Console na seção de Logging ou diretamente na página do serviço Cloud Run.
 
 Para logs específicos do Cloud Run:
 ```bash

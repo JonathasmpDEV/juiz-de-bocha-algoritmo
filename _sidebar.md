@@ -1,0 +1,7 @@
+- **Menu Principal**
+  - [Visão Geral do Projeto](DOCUMENTACAO.md#1-visão-geral-do-projeto)
+  - [Configuração do Ambiente](DOCUMENTACAO.md#2-configuração-do-ambiente-de-desenvolvimento)
+  - [O Reconhecedor (`recognizer.py`)](DOCUMENTACAO.md#3-o-reconhecedor-recognizerpy)
+  - [Treinamento de Modelos](DOCUMENTACAO.md#4-treinamento-de-modelos)
+  - [Servindo com Cloud Run](DOCUMENTACAO.md#5-servindo-o-modelo-com-google-cloud-run-cloud-run-function)
+  - [Estrutura de Diretórios](DOCUMENTACAO.md#6-estrutura-de-diretórios-do-projeto)

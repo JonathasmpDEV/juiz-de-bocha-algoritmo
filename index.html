@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-F-8">
+  <title>Documentação do Projeto Juiz de Bocha Eletrônico</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <meta name="description" content="Documentação detalhada do projeto Juiz de Bocha Eletrônico.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+  <!-- Docsify CSS -->
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+</head>
+<body>
+  <div id="app">Carregando...</div>
+  <script>
+    window.$docsify = {
+      name: 'Juiz de Bocha Eletrônico',
+      repo: '', // TODO: Adicionar URL do repositório se público
+      loadSidebar: true, // Carrega a barra lateral a partir de _sidebar.md
+      alias: {
+        '/.*/_sidebar.md': '/_sidebar.md' // Garante que _sidebar.md é carregado de forma consistente
+      },
+      subMaxLevel: 3, // Níveis de cabeçalho a serem incluídos no sumário da barra lateral
+      homepage: 'DOCUMENTACAO.md', // Define DOCUMENTACAO.md como a página inicial
+      auto2top: true, // Volta ao topo ao mudar de página
+      executeScript: true, // Permite a execução de scripts, necessário para Mermaid.js
+      search: 'auto', // Habilita a busca (plugin de busca será adicionado depois)
+      // Configuração para Mermaid (será adicionado o plugin específico depois)
+      mermaidConfig: {
+        startOnLoad: true
+      }
+    }
+  </script>
+  <!-- Docsify Core -->
+  <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+
+  <!-- Plugins do Docsify -->
+  <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script> <!-- Plugin de Busca -->
+  <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script> <!-- Plugin de Copiar Código -->
+  <script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-python.min.js"></script> <!-- Suporte a Python no Prism -->
+  <script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-bash.min.js"></script> <!-- Suporte a Bash no Prism -->
+  <script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-yaml.min.js"></script> <!-- Suporte a YAML no Prism -->
+  <script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-json.min.js"></script> <!-- Suporte a JSON no Prism -->
+  <script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-dart.min.js"></script> <!-- Suporte a Dart no Prism -->
+  <script src="//cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script> <!-- Mermaid Core -->
+  <script src="//cdn.jsdelivr.net/npm/docsify-mermaid@latest/dist/docsify-mermaid.js"></script> <!-- Plugin Docsify-Mermaid -->
+
+
+</body>
+</html>
