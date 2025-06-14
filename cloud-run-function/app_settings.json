@@ -2,6 +2,12 @@
   "google_drive_upload_folder_id": "COLE_O_ID_DA_PASTA_DO_GOOGLE_DRIVE_AQUI",
   "service_account_key_path": "gdrive_service_account.json",
   "allow_raw_upload_to_gdrive": true,
-  "default_thumbnail_size": [300, 300],
-  "generated_files_parent_folder_name": "JuizDeBochaUploads"
+  "default_thumbnail_size": [
+    300,
+    300
+  ],
+  "generated_files_parent_folder_name": "JuizDeBochaUploadsApp",
+  "output_storage_type": "local",
+  "local_storage_path_generated_files": "/app/output/generated_files",
+  "local_storage_path_raw_files": "/app/output/raw_files"
 }

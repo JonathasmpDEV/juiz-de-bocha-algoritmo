@@ -40,6 +40,9 @@ services:
       # Monta o arquivo de configuração da aplicação e a chave da conta de serviço do Google Drive
       - ./cloud-run-function/app_settings.json:/app/app_settings.json:ro
       - ./gdrive_service_account.json:/app/gdrive_service_account.json:ro
+      # Volumes para armazenamento local de arquivos gerados e raw (se output_storage_type for 'local')
+      - ./app_generated_files:/app/output/generated_files
+      - ./app_raw_files:/app/output/raw_files
       # Se você tivesse um arquivo .pth e não fosse alterar main.py:
       # - ./path_to_your_model_on_host/model_final.pth:/app/models/model/model_final.pth:ro
     restart: unless-stopped
