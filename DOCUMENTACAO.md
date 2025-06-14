@@ -527,6 +527,39 @@ Para facilitar a visualização e o deploy da documentação web (gerada com Doc
 *   Docker instalado (consulte [docs.docker.com/get-docker/](https://docs.docker.com/get-docker/))
 *   Docker Compose instalado (geralmente vem com o Docker Desktop, ou consulte [docs.docker.com/compose/install/](https://docs.docker.com/compose/install/))
 
+### Executando a Aplicação Principal e a Documentação
+
+O arquivo `docker-compose.yml` foi configurado para gerenciar tanto o servidor da documentação quanto a aplicação principal de reconhecimento de bocha.
+
+Ao executar `docker-compose up -d`, ambos os serviços serão iniciados:
+
+*   **Serviço de Documentação (`docsify_docs`):**
+    *   Acessível em: `http://localhost:8080` (ou a porta configurada no `docker-compose.yml`).
+    *   Serve a documentação interativa do projeto.
+
+*   **Serviço da Aplicação Principal (`app_recognizer`):**
+    *   Acessível em: `http://localhost:8000` (ou a porta configurada no `docker-compose.yml`).
+    *   Expõe a API para reconhecimento de imagens de bocha. Os endpoints disponíveis são:
+        *   `POST /image`: Envia uma imagem e recebe um GIF animado como resposta.
+        *   `POST /url`: Envia uma imagem e recebe URLs para a imagem processada (GIF animado e thumbnail).
+        *   `POST /coordinates`: Envia uma imagem e recebe as coordenadas das bolas detectadas e a URL da imagem original.
+
+#### Testando a API da Aplicação Principal
+
+Para testar os endpoints da API da aplicação (`app_recognizer`), você pode usar:
+
+*   **Scripts em `test-cloudrun/`**: Este diretório contém scripts Dart (ex: `test-file.dart`, `test-url.dart`) que podem ser adaptados para enviar requisições para `http://localhost:8000` em vez do endpoint na nuvem.
+*   **Ferramentas como Postman ou Insomnia**: Configure uma requisição POST para um dos endpoints acima, enviando uma imagem no corpo da requisição (como `form-data` ou `binary`).
+
+**Exemplo de comando `curl` (para o endpoint `/url`, requer uma imagem `test.jpg` no mesmo diretório):**
+Este é um exemplo mais complexo devido à necessidade de enviar um arquivo. Ferramentas como Postman são geralmente mais fáceis para isso.
+```bash
+# Este comando é um exemplo e pode precisar de ajustes.
+# O endpoint /url espera o corpo da requisição como os bytes da imagem.
+curl -X POST --data-binary "@test.jpg" -H "Content-Type: image/jpeg" http://localhost:8000/url
+```
+Lembre-se que a aplicação pode tentar interagir com o Google Cloud Storage. Se as credenciais não estiverem configuradas localmente, algumas funcionalidades de upload podem não funcionar completamente, mas o processamento da imagem ainda deve ocorrer.
+
 ### Passos para Execução
 
 1.  **Navegue até a Raiz do Projeto:**

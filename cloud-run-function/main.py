@@ -17,7 +17,7 @@ app = Flask(__name__)
 _rec = Recognizer(
     config_file='models/model/config.yaml',
     # weights_file='models/model/weights.pkl',
-    weights_file='models/model/model_final.pth',
+    weights_file='models/model/weights.pkl',
     confidence_threshold=0.82,
 )
 __project = 'juizdebocha'
