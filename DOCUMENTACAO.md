@@ -13,6 +13,7 @@ Este documento visa fornecer uma visão completa da arquitetura, implementação
 - [7. Servindo a Documentação Web com Docker](#7-servindo-a-documentação-web-com-docker)
 - [8. Gerenciamento de Dados com Google Drive](#8-gerenciamento-de-dados-com-google-drive)
 - [9. Manual de Implantação com Docker](#9-manual-de-implantação-com-docker)
+- [10. Manual de Uso da API com Flutter](#10-manual-de-uso-da-api-com-flutter)
 
 
 ## 1. Visão Geral do Projeto
@@ -866,3 +867,354 @@ Lembre-se que a aplicação, por padrão, tentará fazer upload de algumas image
     *   **Caminhos de Arquivo:** O Docker Compose e o Docker Desktop (com WSL2) geralmente lidam bem com a tradução de caminhos de arquivo entre o sistema operacional host (Windows) e os containers Linux. Os caminhos relativos usados no `docker-compose.yml` (ex: `./models_from_gdrive/`) devem funcionar corretamente.
 
 Seguindo este manual, você deverá ser capaz de implantar e executar todo o sistema Juiz de Bocha Eletrônico em seu ambiente local.
+
+## 10. Manual de Uso da API com Flutter
+
+Este manual descreve como interagir com a API de reconhecimento de bocha a partir de uma aplicação Flutter. Serão fornecidos exemplos de código Dart para enviar imagens aos endpoints da API e processar as respostas.
+
+### Pré-requisitos e Configuração Inicial
+
+1.  **Ambiente Flutter Configurado:** Certifique-se de que seu ambiente de desenvolvimento Flutter está funcionando.
+2.  **Adicionar Dependências ao `pubspec.yaml`:**
+    Adicione os seguintes pacotes ao seu arquivo `pubspec.yaml`:
+    ```yaml
+    dependencies:
+      flutter:
+        sdk: flutter
+      http: ^0.13.6 # Ou a versão mais recente
+      image_picker: ^0.8.9 # Ou a versão mais recente, para selecionar imagens
+      # provider: ^6.0.0 # Opcional, para gerenciamento de estado se for construir uma UI complexa
+      # path_provider: ^2.0.0 # Opcional, para lidar com caminhos de arquivo
+    ```
+    Depois de adicionar, execute `flutter pub get` no seu terminal.
+
+3.  **Configurar Permissões (para `image_picker`):**
+    *   **iOS:** Adicione as chaves necessárias ao seu arquivo `Info.plist` (em `ios/Runner/Info.plist`) para acesso à galeria e câmera. Exemplo:
+        ```xml
+        <key>NSPhotoLibraryUsageDescription</key>
+        <string>Este aplicativo precisa de acesso à sua galeria para selecionar imagens de bocha.</string>
+        <key>NSCameraUsageDescription</key>
+        <string>Este aplicativo precisa de acesso à sua câmera para capturar imagens de bocha.</string>
+        <key>NSMicrophoneUsageDescription</key>
+        <string>Este aplicativo não precisa de acesso ao microfone (mas o image_picker pode pedir).</string>
+        ```
+    *   **Android:** Nenhuma configuração extra é geralmente necessária para o `image_picker` funcionar com API level mais recente, mas se enfrentar problemas, consulte a documentação do `image_picker`. Certifique-se de que seu `minSdkVersion` em `android/app/build.gradle` é 21 ou superior.
+
+4.  **URL Base da API:**
+    Defina a URL base da sua API. Se estiver rodando o Docker localmente:
+    ```dart
+    // No seu código Dart, por exemplo, em um arquivo de constantes ou configurações:
+    const String baseUrl = "http://localhost:8000";
+    // Se estiver testando de um emulador Android, localhost pode não funcionar.
+    // Use "http://10.0.2.2:8000" para o emulador Android padrão se a API estiver rodando na sua máquina host.
+    // Se testando de um dispositivo físico na mesma rede, use o IP local da sua máquina host
+    // (ex: "http://192.168.1.10:8000").
+    ```
+
+### Função Auxiliar para Selecionar Imagem (Usando `image_picker`)
+
+Aqui está uma função simples que você pode usar para permitir que o usuário selecione uma imagem da galeria:
+```dart
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+
+Future<File?> pickImageFromGallery() async {
+  final ImagePicker picker = ImagePicker();
+  final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+  if (pickedFile != null) {
+    return File(pickedFile.path);
+  }
+  return null;
+}
+
+// Para usar a câmera:
+// final XFile? pickedFile = await picker.pickImage(source: ImageSource.camera);
+```
+
+### Função Auxiliar para Enviar Imagem (Requisição POST Multipart)
+
+Esta função genérica pode ser usada para enviar um arquivo de imagem para qualquer um dos endpoints.
+```dart
+import 'dart:convert';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart'; // Para MediaType
+
+Future<http.Response?> uploadImage(File imageFile, String endpointUrl, {Map<String, String>? queryParams}) async {
+  try {
+    var uri = Uri.parse(endpointUrl);
+    if (queryParams != null && queryParams.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParams);
+    }
+
+    var request = http.MultipartRequest('POST', uri);
+
+    // Adicionar o arquivo de imagem
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file', // Nome do campo esperado pelo backend (ajuste se necessário, mas a API atual lê o stream diretamente)
+        imageFile.path,
+        contentType: MediaType('image', imageFile.path.split('.').last), // Ex: image/jpeg, image/png
+      ),
+    );
+
+    print("Enviando imagem para: ${uri.toString()}");
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      print("Upload da imagem bem-sucedido para $endpointUrl.");
+      return response;
+    } else {
+      print("Falha no upload da imagem para $endpointUrl. Status: ${response.statusCode}, Corpo: ${response.body}");
+      return response; // Retorna a resposta mesmo em caso de erro para análise
+    }
+  } catch (e) {
+    print("Erro ao enviar imagem para $endpointUrl: $e");
+    return null;
+  }
+}
+```
+*Nota: A API atual lê diretamente `request.stream.read()`, então o nome do campo 'file' no `MultipartFile.fromPath` não é estritamente usado por ela, mas é uma boa prática incluí-lo.*
+
+### Consumindo o Endpoint `POST /image`
+
+Este endpoint retorna um GIF (binário ou Base64) da imagem processada.
+
+**1. Enviando a Requisição e Processando a Resposta:**
+
+```dart
+// Assumindo que 'selectedImageFile' é um objeto File obtido do image_picker
+// e 'baseUrl' está definido como "http://localhost:8000"
+
+Future<void> callApiImageEndpoint(File selectedImageFile, bool withThumbnail) async {
+  String endpoint = "$baseUrl/image";
+  Map<String, String> queryParams = {};
+  if (withThumbnail) {
+    queryParams['with-thumbnail'] = 'true';
+  }
+
+  http.Response? response = await uploadImage(selectedImageFile, endpoint, queryParams: queryParams);
+
+  if (response != null && response.statusCode == 200) {
+    if (withThumbnail) {
+      // Resposta é JSON com 'gif' e 'thumbnail' em Base64
+      try {
+        var decodedResponse = jsonDecode(response.body);
+        String? gifBase64 = decodedResponse['gif'];
+        String? thumbnailBase64 = decodedResponse['thumbnail'];
+
+        if (gifBase64 != null) {
+          // Use gifBytes para exibir a imagem GIF (veja abaixo)
+          final gifBytes = base64Decode(gifBase64);
+          print("GIF (Base64) recebido e decodificado (${gifBytes.lengthInBytes} bytes)");
+          // setState(() { _gifImageData = gifBytes; }); // Exemplo em StatefulWidget
+        }
+        if (thumbnailBase64 != null) {
+          final thumbnailBytes = base64Decode(thumbnailBase64);
+          print("Thumbnail (Base64) recebido e decodificado (${thumbnailBytes.lengthInBytes} bytes)");
+          // setState(() { _thumbnailImageData = thumbnailBytes; }); // Exemplo
+        }
+      } catch (e) {
+        print("Erro ao decodificar JSON da resposta /image: $e");
+      }
+    } else {
+      // Resposta é o GIF binário diretamente
+      final gifBytes = response.bodyBytes;
+      print("GIF (binário) recebido diretamente (${gifBytes.lengthInBytes} bytes)");
+      // setState(() { _gifImageData = gifBytes; }); // Exemplo em StatefulWidget
+    }
+  } else {
+    print("Falha ao chamar /image. Status: ${response?.statusCode}, Corpo: ${response?.body}");
+  }
+}
+```
+
+**2. Exibindo a Imagem GIF (Bytes) em um Widget Flutter:**
+
+```dart
+// Em um StatefulWidget, você teria uma variável de estado, por exemplo:
+// Uint8List? _gifImageData;
+
+// No método build():
+// if (_gifImageData != null)
+//   Image.memory(_gifImageData!)
+// else
+//   Text("Nenhuma imagem GIF para exibir"),
+```
+
+### Consumindo o Endpoint `POST /url`
+
+Este endpoint retorna URLs (para Google Cloud Storage) da imagem processada.
+
+```dart
+// Assumindo que 'selectedImageFile' é um objeto File
+// e 'baseUrl' está definido
+
+Future<void> callApiUrlEndpoint(File selectedImageFile, bool withThumbnail) async {
+  String endpoint = "$baseUrl/url";
+  Map<String, String> queryParams = {};
+  if (withThumbnail) {
+    queryParams['with-thumbnail'] = 'true';
+  }
+
+  http.Response? response = await uploadImage(selectedImageFile, endpoint, queryParams: queryParams);
+
+  if (response != null && response.statusCode == 200) {
+    if (withThumbnail) {
+      // Resposta é JSON com 'animated' (URL do GIF) e 'thumbnail' (URL do Thumbnail)
+      try {
+        var decodedResponse = jsonDecode(response.body);
+        String? animatedGifUrl = decodedResponse['animated'];
+        String? thumbnailUrl = decodedResponse['thumbnail'];
+
+        if (animatedGifUrl != null) {
+          print("URL do GIF Animado: $animatedGifUrl");
+          // setState(() { _animatedGifUrl = animatedGifUrl; }); // Exemplo
+        }
+        if (thumbnailUrl != null) {
+          print("URL do Thumbnail: $thumbnailUrl");
+          // setState(() { _thumbnailUrl = thumbnailUrl; }); // Exemplo
+        }
+      } catch (e) {
+        print("Erro ao decodificar JSON da resposta /url: $e");
+      }
+    } else {
+      // Resposta é a string da URL do GIF diretamente
+      String animatedGifUrl = response.body;
+      print("URL do GIF Animado (direta): $animatedGifUrl");
+      // setState(() { _animatedGifUrl = animatedGifUrl; }); // Exemplo
+    }
+  } else {
+    print("Falha ao chamar /url. Status: ${response?.statusCode}, Corpo: ${response?.body}");
+  }
+}
+```
+
+**Exibindo Imagens a partir de URLs em Flutter:**
+```dart
+// Em um StatefulWidget:
+// String? _animatedGifUrl;
+// String? _thumbnailUrl;
+
+// No método build():
+// if (_animatedGifUrl != null)
+//   Image.network(_animatedGifUrl!) // Para o GIF
+// if (_thumbnailUrl != null)
+//   Image.network(_thumbnailUrl!)   // Para o Thumbnail
+```
+
+### Consumindo o Endpoint `POST /coordinates`
+
+Este endpoint retorna coordenadas JSON das bolas detectadas e a URL da imagem original no GCS.
+
+```dart
+// Assumindo que 'selectedImageFile' é um objeto File
+// e 'baseUrl' está definido
+
+// Defina classes Dart para melhor tipagem da resposta (opcional, mas recomendado)
+class BallCoordinate {
+  final Point center;
+  final Ellipse ellipse;
+  BallCoordinate({required this.center, required this.ellipse});
+
+  factory BallCoordinate.fromJson(Map<String, dynamic> json) {
+    return BallCoordinate(
+      center: Point.fromJson(json['center']),
+      ellipse: Ellipse.fromJson(json['ellipse']),
+    );
+  }
+}
+
+class Point {
+  final double x;
+  final double y;
+  Point({required this.x, required this.y});
+
+  factory Point.fromJson(Map<String, dynamic> json) {
+    return Point(x: (json['x'] as num).toDouble(), y: (json['y'] as num).toDouble());
+  }
+}
+
+class Ellipse {
+  final double width;
+  final double height;
+  Ellipse({required this.width, required this.height});
+
+  factory Ellipse.fromJson(Map<String, dynamic> json) {
+    return Ellipse(width: (json['width'] as num).toDouble(), height: (json['height'] as num).toDouble());
+  }
+}
+
+class CoordinatesResponse {
+  final String url;
+  final BallCoordinate smallest;
+  final BallCoordinate winner;
+  final List<BallCoordinate> balls;
+
+  CoordinatesResponse({
+    required this.url,
+    required this.smallest,
+    required this.winner,
+    required this.balls,
+  });
+
+  factory CoordinatesResponse.fromJson(Map<String, dynamic> json) {
+    var ballsList = json['balls'] as List;
+    List<BallCoordinate> parsedBalls = ballsList.map((i) => BallCoordinate.fromJson(i)).toList();
+    return CoordinatesResponse(
+      url: json['url'],
+      smallest: BallCoordinate.fromJson(json['smallest']),
+      winner: BallCoordinate.fromJson(json['winner']),
+      balls: parsedBalls,
+    );
+  }
+}
+
+Future<CoordinatesResponse?> callApiCoordinatesEndpoint(File selectedImageFile) async {
+  String endpoint = "$baseUrl/coordinates";
+
+  http.Response? response = await uploadImage(selectedImageFile, endpoint);
+
+  if (response != null && response.statusCode == 200) {
+    try {
+      var decodedResponse = jsonDecode(response.body);
+      CoordinatesResponse result = CoordinatesResponse.fromJson(decodedResponse);
+
+      print("Imagem Original URL (GCS): ${result.url}");
+      print("Bolim (Smallest): Centro X: ${result.smallest.center.x.toStringAsFixed(3)}}, Y: ${result.smallest.center.y.toStringAsFixed(3)}}");
+      print("Vencedora (Winner): Centro X: ${result.winner.center.x.toStringAsFixed(3)}}, Y: ${result.winner.center.y.toStringAsFixed(3)}}");
+      result.balls.asMap().forEach((index, ball) {
+        print("Outra Bola $index: Centro X: ${ball.center.x.toStringAsFixed(3)}}, Y: ${ball.center.y.toStringAsFixed(3)}}");
+      });
+      return result;
+      // Você pode então usar 'result' para desenhar sobre a imagem original (obtida de result.url)
+      // ou para qualquer outra lógica de visualização.
+    } catch (e) {
+      print("Erro ao decodificar JSON da resposta /coordinates: $e");
+      return null;
+    }
+  } else {
+    print("Falha ao chamar /coordinates. Status: ${response?.statusCode}, Corpo: ${response?.body}");
+    return null;
+  }
+}
+```
+
+**Ideias para Visualização das Coordenadas:**
+Para desenhar as coordenadas sobre a imagem original (cuja URL é retornada), você pode:
+1.  Carregar a imagem da `result.url` usando `Image.network`.
+2.  Usar um `CustomPaint` widget em Flutter.
+3.  No `CustomPainter`, desenhar a imagem carregada e, em seguida, desenhar elipses ou círculos sobre ela usando as coordenadas normalizadas (multiplicando-as pelas dimensões reais da imagem no canvas).
+
+### Tratamento de Erros e Considerações
+
+*   **Status Codes:** Sempre verifique o `response.statusCode`. Um status `200 OK` geralmente indica sucesso. Outros códigos (4xx, 5xx) indicam erros.
+*   **Exceções de Rede:** Envolva suas chamadas de API em blocos `try-catch` para lidar com problemas de conectividade (ex: `SocketException`).
+*   **Timeouts:** O pacote `http` tem um timeout padrão. Você pode configurá-lo usando `.timeout()` no Future da requisição se precisar de mais controle.
+*   **UI Responsiva:** Faça chamadas de API de forma assíncrona (usando `async/await`) para não bloquear a thread de UI. Use indicadores de carregamento (ex: `CircularProgressIndicator`) enquanto a API processa.
+*   **Segurança da URL Base:** Em um aplicativo de produção, evite "hardcodar" URLs. Use variáveis de ambiente ou um sistema de configuração.
+*   **Interação com GCS:** Lembre-se que os endpoints `/url` e `/coordinates` dependem do upload para o Google Cloud Storage. Se as credenciais não estiverem configuradas no backend Docker (o que geralmente não é o caso para um setup local simples), essas partes podem falhar, e as URLs retornadas podem não ser válidas ou os endpoints podem retornar erros.
+
+Este manual deve fornecer uma base sólida para consumir a API de reconhecimento de bocha a partir de uma aplicação Flutter.

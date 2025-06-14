@@ -8,4 +8,5 @@
   - [Servindo a Documentação Web com Docker](DOCUMENTACAO.md#7-servindo-a-documentação-web-com-docker)
   - [Gerenciamento de Dados com Google Drive](DOCUMENTACAO.md#8-gerenciamento-de-dados-com-google-drive)
   - [9. Manual de Implantação](DOCUMENTACAO.md#9-manual-de-implantação-com-docker)
+  - [10. Manual API Flutter](DOCUMENTACAO.md#10-manual-de-uso-da-api-com-flutter)
   - [Configurar Google Drive (JSON)](config_gdrive.md)
