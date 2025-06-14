@@ -10,6 +10,7 @@ Este documento visa fornecer uma visão completa da arquitetura, implementação
 - [4. Treinamento de Modelos](#4-treinamento-de-modelos)
 - [5. Servindo o Modelo com Google Cloud Run (`cloud-run-function/`)](#5-servindo-o-modelo-com-google-cloud-run-cloud-run-function)
 - [6. Estrutura de Diretórios do Projeto](#6-estrutura-de-diretórios-do-projeto)
+- [7. Servindo a Documentação Web com Docker](#7-servindo-a-documentação-web-com-docker)
 
 
 ## 1. Visão Geral do Projeto
@@ -516,3 +517,50 @@ A seguir, uma descrição dos principais diretórios encontrados na raiz do proj
 *   **`test-recognizer.py`**: Script para testar a funcionalidade do `recognizer.py`.
 
 Esta estrutura visa organizar os diferentes aspectos do projeto, desde a preparação de dados e treinamento de modelos até o deploy da aplicação em nuvem.
+
+## 7. Servindo a Documentação Web com Docker
+
+Para facilitar a visualização e o deploy da documentação web (gerada com Docsify.js), foi configurado um ambiente Docker com Nginx. Você pode servir a documentação localmente usando Docker Compose.
+
+### Pré-requisitos
+
+*   Docker instalado (consulte [docs.docker.com/get-docker/](https://docs.docker.com/get-docker/))
+*   Docker Compose instalado (geralmente vem com o Docker Desktop, ou consulte [docs.docker.com/compose/install/](https://docs.docker.com/compose/install/))
+
+### Passos para Execução
+
+1.  **Navegue até a Raiz do Projeto:**
+    Certifique-se de que você está no diretório raiz do projeto onde o arquivo `docker-compose.yml` está localizado.
+
+2.  **Construir a Imagem Docker (se ainda não foi construída):**
+    Este comando constrói a imagem Docker conforme definido no `docs-server/Dockerfile`.
+    ```bash
+    docker-compose build
+    ```
+
+3.  **Iniciar o Serviço de Documentação:**
+    Este comando inicia o container Nginx em modo detached (`-d`), servindo a documentação.
+    ```bash
+    docker-compose up -d
+    ```
+    A documentação estará acessível no seu navegador em: `http://localhost:8080` (ou a porta que você configurou no `docker-compose.yml`).
+
+    *Nota sobre Desenvolvimento:* O `docker-compose.yml` está configurado com volumes que montam os arquivos `DOCUMENTACAO.md`, `index.html` e `_sidebar.md` diretamente no container. Isso significa que se você editar esses arquivos no seu host, as alterações serão refletidas imediatamente ao recarregar a página no navegador, sem precisar reconstruir a imagem Docker (`docker-compose build`). Para um deploy em "produção", você pode comentar ou remover a seção `volumes` no `docker-compose.yml` para usar os arquivos que foram copiados para a imagem durante o build.
+
+4.  **Visualizar Logs (Opcional):**
+    Se precisar verificar os logs do servidor Nginx dentro do container:
+    ```bash
+    docker-compose logs docsify_docs
+    ```
+    Para seguir os logs em tempo real:
+    ```bash
+    docker-compose logs -f docsify_docs
+    ```
+
+5.  **Parar o Serviço de Documentação:**
+    Para parar e remover os containers definidos no `docker-compose.yml`:
+    ```bash
+    docker-compose down
+    ```
+
+Com esses passos, você pode facilmente servir e visualizar a documentação do projeto em um ambiente containerizado.

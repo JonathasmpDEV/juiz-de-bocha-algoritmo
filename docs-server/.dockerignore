@@ -1,0 +1,8 @@
+# Ignorar arquivos comuns de sistema operacional e editores
+.DS_Store
+*.swp
+*~
+*.swo
+
+# Ignorar arquivos de log locais ou de teste, se houver
+*.log

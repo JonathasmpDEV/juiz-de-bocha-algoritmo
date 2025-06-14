@@ -1,0 +1,26 @@
+version: '3.8' # Especifica a versão do formato do arquivo Docker Compose
+
+services:
+  docsify_docs:
+    build:
+      context: ./docs-server # O diretório onde o Dockerfile está localizado
+      dockerfile: Dockerfile
+    container_name: juiz_de_bocha_docs # Nome amigável para o container
+    ports:
+      - "8080:80" # Mapeia a porta 8080 do host para a porta 80 do container (onde o Nginx escuta)
+    restart: unless-stopped # Política de reinício: reinicia o container a menos que seja parado manualmente
+    volumes:
+      # Para desenvolvimento: montar os arquivos de documentação diretamente no container
+      # Isso permite ver as alterações ao vivo sem reconstruir a imagem.
+      # Para produção, você pode comentar esta seção de volumes para usar os arquivos copiados no Dockerfile.
+      - ./DOCUMENTACAO.md:/usr/share/nginx/html/DOCUMENTACAO.md:ro
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./_sidebar.md:/usr/share/nginx/html/_sidebar.md:ro
+    labels:
+      - "description=Serviço de documentação do Juiz de Bocha Eletrônico via Docsify e Nginx"
+      - "project=JuizDeBocha"
+
+# Informações adicionais (opcional)
+# networks:
+#   default:
+#     name: juizdebocha_network
