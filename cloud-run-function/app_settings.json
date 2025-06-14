@@ -1,0 +1,7 @@
+{
+  "google_drive_upload_folder_id": "COLE_O_ID_DA_PASTA_DO_GOOGLE_DRIVE_AQUI",
+  "service_account_key_path": "gdrive_service_account.json",
+  "allow_raw_upload_to_gdrive": true,
+  "default_thumbnail_size": [300, 300],
+  "generated_files_parent_folder_name": "JuizDeBochaUploads"
+}

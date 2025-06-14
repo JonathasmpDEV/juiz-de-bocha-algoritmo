@@ -37,6 +37,9 @@ services:
       # Assumindo que main.py será ajustado para ler 'weights.pkl'
       - ./models_from_gdrive/config.yaml:/app/models/model/config.yaml:ro
       - ./models_from_gdrive/weights.pkl:/app/models/model/weights.pkl:ro
+      # Monta o arquivo de configuração da aplicação e a chave da conta de serviço do Google Drive
+      - ./cloud-run-function/app_settings.json:/app/app_settings.json:ro
+      - ./gdrive_service_account.json:/app/gdrive_service_account.json:ro
       # Se você tivesse um arquivo .pth e não fosse alterar main.py:
       # - ./path_to_your_model_on_host/model_final.pth:/app/models/model/model_final.pth:ro
     restart: unless-stopped

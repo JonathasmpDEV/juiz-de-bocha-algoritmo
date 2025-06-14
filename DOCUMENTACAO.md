@@ -620,6 +620,54 @@ Esta seção descreve como integrar o Google Drive para gerenciar datasets de tr
     *   Antes de executar a aplicação `app_recognizer` (via `docker-compose up`), você executa `python gdrive_download.py --type models` para baixar a subpasta `models` do seu Google Drive para um diretório local (ex: `./models_from_gdrive`).
     *   Você garante que os arquivos baixados nesta pasta sejam nomeados `config.yaml` e `weights.pkl` para que o `docker-compose.yml` possa montá-los corretamente para a aplicação.
 
+### Configuração da Conta de Serviço para Uploads da Aplicação
+
+Para que a aplicação `app_recognizer` (rodando via Docker) possa salvar arquivos automaticamente no Google Drive, você precisará configurar uma Conta de Serviço do Google Cloud. Esta é diferente da autenticação OAuth 2.0 usada pelos scripts `gdrive_auth.py` e `gdrive_download.py` (que é para seu acesso pessoal).
+
+1.  **Acesse o Google Cloud Console:**
+    *   Vá para [console.cloud.google.com](https://console.cloud.google.com/) e selecione o projeto Google Cloud associado às suas credenciais OAuth (ou um projeto apropriado).
+
+2.  **Crie uma Conta de Serviço:**
+    *   No menu de navegação, vá para "IAM e Admin" > "Contas de serviço".
+    *   Clique em "+ CRIAR CONTA DE SERVIÇO".
+    *   **Nome da conta de serviço:** Dê um nome descritivo (ex: `juiz-bocha-gdrive-uploader`). O ID da conta de serviço será gerado automaticamente.
+    *   **Descrição:** Opcional, mas útil (ex: "Conta de serviço para a API Juiz de Bocha fazer upload de arquivos para o Google Drive").
+    *   Clique em "CRIAR E CONTINUAR".
+    *   **Conceder acesso ao projeto (Opcional para esta finalidade):** Para esta conta de serviço, o papel principal é acessar o Google Drive, o que é feito compartilhando a pasta do Drive diretamente com ela, não necessariamente por papéis do IAM no projeto GCP, a menos que ela precise interagir com outras APIs do GCP. Você pode pular a atribuição de papéis do IAM no projeto por enquanto, ou conceder um papel mínimo se souber que será necessário para outras interações. Clique em "CONTINUAR".
+    *   **Conceder aos usuários acesso a esta conta de serviço (Opcional):** Você pode pular esta etapa. Clique em "CONCLUÍDO".
+
+3.  **Gere uma Chave para a Conta de Serviço:**
+    *   Na lista de contas de serviço, encontre a que você acabou de criar.
+    *   Clique no nome da conta de serviço para abrir seus detalhes.
+    *   Vá para a aba "CHAVES".
+    *   Clique em "ADICIONAR CHAVE" > "Criar nova chave".
+    *   **Tipo de chave:** Escolha **JSON**.
+    *   Clique em "CRIAR". Um arquivo JSON contendo a chave da conta de serviço será baixado automaticamente pelo seu navegador.
+
+4.  **Guarde e Renomeie a Chave JSON:**
+    *   Este arquivo JSON é muito importante e sensível, pois permite o acesso como a conta de serviço.
+    *   **Renomeie o arquivo baixado para `gdrive_service_account.json`**.
+    *   Coloque este arquivo na **raiz do seu projeto** Juiz de Bocha Eletrônico.
+    *   **IMPORTANTE:** Adicione `gdrive_service_account.json` ao seu arquivo `.gitignore` principal para evitar que esta chave secreta seja enviada para o seu repositório Git.
+        ```
+        # .gitignore
+        # ... outras entradas ...
+        gdrive_service_account.json
+        gdrive_token.json
+        gdrive_credentials.json
+        ```
+
+5.  **Compartilhe a Pasta do Google Drive com a Conta de Serviço:**
+    *   Abra o Google Drive no seu navegador.
+    *   Navegue até a pasta que você especificou em `cloud-run-function/app_settings.json` (no campo `google_drive_upload_folder_id`). Se esta pasta ainda não existir, crie-a.
+        *   *Lembre-se: O `google_drive_upload_folder_id` no `app_settings.json` é o ID da pasta, não a URL completa.* Você pode obter o ID da URL da pasta (a string longa após `folders/`).
+    *   Clique com o botão direito na pasta e selecione "Compartilhar" ou "Gerenciar acesso".
+    *   No campo "Adicionar pessoas e grupos", cole o **endereço de e-mail da Conta de Serviço** que você criou. Você pode encontrar este e-mail nos detalhes da conta de serviço no Google Cloud Console (geralmente algo como `nome-da-conta@seu-projeto-id.iam.gserviceaccount.com`).
+    *   Conceda à conta de serviço o papel de **Editor** (ou "Colaborador", dependendo da interface do Drive). Isso permitirá que a aplicação crie arquivos e pastas dentro desta pasta compartilhada.
+    *   Desmarque a opção "Notificar pessoas" (opcional) e clique em "Compartilhar" ou "Salvar".
+
+Com esses passos, a aplicação `app_recognizer`, quando executada com o `docker-compose.yml` configurado para montar o `gdrive_service_account.json`, poderá autenticar-se no Google Drive e fazer upload de arquivos para a pasta especificada.
+
 ### Configuração Inicial Detalhada
 
 1.  **Criar `gdrive_credentials.json` (Credenciais OAuth 2.0):**
