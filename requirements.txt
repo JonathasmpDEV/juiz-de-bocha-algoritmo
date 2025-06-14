@@ -77,3 +77,5 @@ watchdog==1.0.2
 Werkzeug==2.0.2
 yacs==0.1.8
 zipp==3.7.0
+google-api-python-client
+google-auth-httplib2

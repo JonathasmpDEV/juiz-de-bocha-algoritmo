@@ -5,3 +5,7 @@
   - [Treinamento de Modelos](DOCUMENTACAO.md#4-treinamento-de-modelos)
   - [Servindo com Cloud Run](DOCUMENTACAO.md#5-servindo-o-modelo-com-google-cloud-run-cloud-run-function)
   - [Estrutura de Diretórios](DOCUMENTACAO.md#6-estrutura-de-diretórios-do-projeto)
+  - [Servindo a Documentação Web com Docker](DOCUMENTACAO.md#7-servindo-a-documentação-web-com-docker)
+  - [Gerenciamento de Dados com Google Drive](DOCUMENTACAO.md#8-gerenciamento-de-dados-com-google-drive)
+  - [9. Manual de Implantação](DOCUMENTACAO.md#9-manual-de-implantação-com-docker)
+  - [Configurar Google Drive (JSON)](config_gdrive.md)

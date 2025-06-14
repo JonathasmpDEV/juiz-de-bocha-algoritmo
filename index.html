@@ -44,6 +44,25 @@
   <script src="//cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script> <!-- Mermaid Core -->
   <script src="//cdn.jsdelivr.net/npm/docsify-mermaid@latest/dist/docsify-mermaid.js"></script> <!-- Plugin Docsify-Mermaid -->
 
+<script>
+  function generateGdriveConfig() {
+    const url = document.getElementById('gdriveUrl').value;
+    const datasetsPath = document.getElementById('localDatasetsPath').value;
+    const modelsPath = document.getElementById('localModelsPath').value;
 
+    if (!url) {
+      alert("Por favor, insira a URL da pasta do Google Drive.");
+      return;
+    }
+
+    const configJson = {
+      google_drive_folder_url: url,
+      local_datasets_path: datasetsPath || "./datasets_gdrive",
+      local_models_path: modelsPath || "./models_from_gdrive"
+    };
+
+    document.getElementById('gdriveConfigOutput').textContent = JSON.stringify(configJson, null, 2);
+  }
+</script>
 </body>
 </html>

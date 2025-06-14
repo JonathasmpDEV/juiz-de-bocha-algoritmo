@@ -35,8 +35,8 @@ services:
       - ./cloud-run-function:/app:ro
       # Monta os arquivos de modelo específicos nos locais esperados pela aplicação (main.py)
       # Assumindo que main.py será ajustado para ler 'weights.pkl'
-      - ./models/mask_rcnn_X_101_32x8d_FPN_3x/mask_rcnn_X_101_32x8d_FPN_3x.yaml:/app/models/model/config.yaml:ro
-      - ./models/mask_rcnn_X_101_32x8d_FPN_3x/model_final_2d9806.pkl:/app/models/model/weights.pkl:ro
+      - ./models_from_gdrive/config.yaml:/app/models/model/config.yaml:ro
+      - ./models_from_gdrive/weights.pkl:/app/models/model/weights.pkl:ro
       # Se você tivesse um arquivo .pth e não fosse alterar main.py:
       # - ./path_to_your_model_on_host/model_final.pth:/app/models/model/model_final.pth:ro
     restart: unless-stopped

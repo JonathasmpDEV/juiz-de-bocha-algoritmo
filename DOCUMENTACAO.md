@@ -11,6 +11,8 @@ Este documento visa fornecer uma visão completa da arquitetura, implementação
 - [5. Servindo o Modelo com Google Cloud Run (`cloud-run-function/`)](#5-servindo-o-modelo-com-google-cloud-run-cloud-run-function)
 - [6. Estrutura de Diretórios do Projeto](#6-estrutura-de-diretórios-do-projeto)
 - [7. Servindo a Documentação Web com Docker](#7-servindo-a-documentação-web-com-docker)
+- [8. Gerenciamento de Dados com Google Drive](#8-gerenciamento-de-dados-com-google-drive)
+- [9. Manual de Implantação com Docker](#9-manual-de-implantação-com-docker)
 
 
 ## 1. Visão Geral do Projeto
@@ -597,3 +599,270 @@ Lembre-se que a aplicação pode tentar interagir com o Google Cloud Storage. Se
     ```
 
 Com esses passos, você pode facilmente servir e visualizar a documentação do projeto em um ambiente containerizado.
+
+## 8. Gerenciamento de Dados com Google Drive
+
+Esta seção descreve como integrar o Google Drive para gerenciar datasets de treinamento e arquivos de modelo para este projeto. Isso permite um fluxo de trabalho mais flexível, onde os dados podem ser armazenados centralmente no Google Drive e baixados para o ambiente local conforme necessário.
+
+### Visão Geral do Fluxo com Google Drive
+
+1.  **Configuração Única**:
+    *   Você cria um arquivo `gdrive_credentials.json` a partir do Google Cloud Console.
+    *   Você cria um arquivo `gdrive_config.json` na raiz do projeto, especificando a URL da sua pasta principal no Google Drive que conterá os subdiretórios `datasets` e `models`.
+    *   Você executa o script `gdrive_auth.py` uma vez para autorizar o acesso da aplicação ao seu Google Drive. Isso criará um `gdrive_token.json`.
+
+2.  **Download de Datasets para Treinamento**:
+    *   Antes de treinar, você executa `python gdrive_download.py --type datasets` para baixar a subpasta `datasets` do seu Google Drive para um diretório local (ex: `./datasets_gdrive`).
+    *   Você ajusta os scripts `register_datasets.py` para apontar para este diretório local.
+
+3.  **Download de Modelos para Inferência**:
+    *   Antes de executar a aplicação `app_recognizer` (via `docker-compose up`), você executa `python gdrive_download.py --type models` para baixar a subpasta `models` do seu Google Drive para um diretório local (ex: `./models_from_gdrive`).
+    *   Você garante que os arquivos baixados nesta pasta sejam nomeados `config.yaml` e `weights.pkl` para que o `docker-compose.yml` possa montá-los corretamente para a aplicação.
+
+### Configuração Inicial Detalhada
+
+1.  **Criar `gdrive_credentials.json` (Credenciais OAuth 2.0):**
+    *   Acesse o [Google Cloud Console](https://console.cloud.google.com/).
+    *   Selecione ou crie um projeto.
+    *   Navegue para "APIs e Serviços" > "Credenciais".
+    *   Clique em "Criar Credenciais" > "ID do cliente OAuth".
+    *   Se solicitado, configure a "Tela de consentimento OAuth":
+        *   **Tipo de usuário**: "Externo" (geralmente).
+        *   Preencha o nome do aplicativo, e-mail de suporte e informações de contato do desenvolvedor.
+        *   **Escopos**: Não adicione escopos aqui; o script `gdrive_auth.py` os solicitará.
+        *   **Usuários de teste**: Adicione seu próprio endereço de e-mail do Google.
+    *   Após configurar a tela de consentimento, volte para "Criar Credenciais" > "ID do cliente OAuth".
+    *   Escolha o **Tipo de aplicativo**: "Aplicativo para computador" ou "Aplicativo de desktop".
+    *   Dê um nome (ex: "JuizDeBochaGdriveClient").
+    *   Clique em "Criar". Uma janela mostrará seu ID de cliente e Chave de cliente.
+    *   **Baixe o JSON**: Clique no botão de download (geralmente um ícone de seta para baixo) ao lado do ID do cliente OAuth que você acabou de criar na lista de "IDs de cliente OAuth 2.0".
+    *   Renomeie o arquivo baixado para `gdrive_credentials.json` e coloque-o na raiz do seu projeto.
+    *   **Importante**: Este arquivo contém segredos. Adicione `gdrive_credentials.json` ao seu arquivo `.gitignore` global para evitar enviá-lo para o repositório Git.
+
+2.  **Criar e Configurar `gdrive_config.json`:**
+    *   Na raiz do projeto, crie um arquivo chamado `gdrive_config.json`.
+    *   Cole o seguinte conteúdo e modifique a URL:
+        ```json
+        {
+          "google_drive_folder_url": "COLE_A_URL_DA_SUA_PASTA_RAIZ_NO_GOOGLE_DRIVE_AQUI",
+          "local_datasets_path": "./datasets_gdrive",
+          "local_models_path": "./models_from_gdrive"
+        }
+        ```
+    *   Substitua `"COLE_A_URL_DA_SUA_PASTA_RAIZ_NO_GOOGLE_DRIVE_AQUI"` pela URL da pasta no Google Drive que você usará. Dentro desta pasta, você deve criar subpastas chamadas `datasets` e `models`.
+    *   `local_datasets_path` e `local_models_path` são os diretórios locais padrão onde os scripts baixarão os respectivos conteúdos.
+
+3.  **Executar Autenticação Inicial (`gdrive_auth.py`):**
+    *   Abra um terminal na raiz do projeto.
+    *   Execute o script de autenticação:
+        ```bash
+        python gdrive_auth.py
+        ```
+    *   Este script tentará abrir uma janela no seu navegador para você autorizar o acesso ao Google Drive. Siga as instruções.
+    *   Após a autorização, um arquivo `gdrive_token.json` será criado na raiz do projeto. Este arquivo armazena seus tokens de acesso e deve ser mantido em segurança (adicione-o ao `.gitignore` também).
+
+### Baixando Datasets para Treinamento
+
+1.  **Certifique-se de que a Configuração Inicial foi concluída.**
+2.  **Estrutura no Google Drive:** Dentro da sua pasta raiz configurada em `gdrive_config.json`, crie uma subpasta chamada `datasets`. Dentro desta subpasta `datasets`, organize seus arquivos de dataset no formato COCO, por exemplo:
+    ```
+    Sua_Pasta_Raiz_GDrive/
+    └── datasets/
+        ├── juiz_de_bocha_train.json  (arquivo de anotações de treino)
+        ├── juiz_de_bocha_val.json    (arquivo de anotações de validação)
+        └── data/                     (pasta contendo todas as imagens .jpg)
+            ├── img1.jpg
+            ├── img2.jpg
+            └── ...
+    ```
+3.  **Execute o Script de Download:**
+    No terminal, na raiz do projeto, execute:
+    ```bash
+    python gdrive_download.py --type datasets
+    ```
+    Isso baixará o conteúdo da pasta `datasets` do seu Google Drive para o diretório especificado por `local_datasets_path` em `gdrive_config.json` (padrão: `./datasets_gdrive`).
+
+4.  **Ajuste os Scripts de Registro de Dataset:**
+    *   Abra o script `train_custom_dataset/register_datasets.py`.
+    *   Modifique a variável `dataset_dir` para apontar para o caminho onde você baixou os datasets. Por exemplo, se baixou para `./datasets_gdrive`, e a estrutura interna é como a descrita acima, `dataset_dir` deve ser `'./datasets_gdrive'`.
+    *   Se estiver usando `train/register_datasets.py`, ajuste as variáveis `annotations_dir`, `train_images_dir`, `val_images_dir` de forma similar.
+
+5.  **Prossiga com o Treinamento:**
+    Agora você pode executar seus scripts de treinamento (ex: `train_custom_dataset/3_train.py`), e eles usarão os datasets baixados.
+
+### Baixando Modelos para Inferência (`app_recognizer`)
+
+1.  **Certifique-se de que a Configuração Inicial foi concluída.**
+2.  **Estrutura no Google Drive:** Dentro da sua pasta raiz configurada em `gdrive_config.json`, crie uma subpasta chamada `models`. Dentro desta subpasta `models`, coloque seus arquivos de modelo:
+    ```
+    Sua_Pasta_Raiz_GDrive/
+    └── models/
+        ├── config.yaml  (Seu arquivo de configuração .yaml do modelo)
+        └── weights.pkl  (Seu arquivo de pesos .pkl do modelo)
+    ```
+    *Nota: Certifique-se de que os nomes dos arquivos são exatamente `config.yaml` e `weights.pkl` para que o `docker-compose.yml` os monte corretamente.*
+
+3.  **Execute o Script de Download:**
+    No terminal, na raiz do projeto, execute:
+    ```bash
+    python gdrive_download.py --type models
+    ```
+    Isso baixará o conteúdo da pasta `models` do seu Google Drive para o diretório especificado por `local_models_path` em `gdrive_config.json` (padrão: `./models_from_gdrive`).
+
+4.  **Execute a Aplicação com Docker Compose:**
+    ```bash
+    docker-compose up -d app_recognizer
+    ```
+    O `docker-compose.yml` já está configurado para montar os arquivos `config.yaml` e `weights.pkl` de `./models_from_gdrive/` para dentro do container `app_recognizer`, nos locais onde a aplicação espera encontrá-los.
+
+Lembre-se de adicionar `gdrive_credentials.json` e `gdrive_token.json` ao seu arquivo `.gitignore` para não versionar informações sensíveis.
+
+## 9. Manual de Implantação com Docker
+
+Este manual fornece um guia passo a passo para configurar e executar o projeto Juiz de Bocha Eletrônico (tanto a API de reconhecimento quanto a documentação web) em seu ambiente local usando Docker e Docker Compose.
+
+### Introdução
+
+Utilizamos Docker para empacotar a aplicação e suas dependências, garantindo um ambiente de execução consistente. O Docker Compose é usado para orquestrar os múltiplos serviços (aplicação e documentação).
+
+### Pré-requisitos
+
+Antes de começar, certifique-se de que você tem os seguintes softwares instalados em sua máquina:
+
+1.  **Git:** Para clonar o repositório do projeto.
+    *   [Download Git](https://git-scm.com/downloads)
+2.  **Docker e Docker Compose:**
+    *   **Windows/Mac:** Recomendamos instalar o [Docker Desktop](https://www.docker.com/products/docker-desktop/). Ele já inclui o Docker Compose.
+    *   **Linux:**
+        *   Instale o Docker Engine seguindo as instruções para sua distribuição em [docs.docker.com/engine/install/](https://docs.docker.com/engine/install/).
+        *   Instale o Docker Compose seguindo as instruções em [docs.docker.com/compose/install/](https://docs.docker.com/compose/install/).
+3.  **Python (versão 3.8 ou superior):** Necessário se você planeja usar a integração com Google Drive para gerenciar datasets e modelos, pois os scripts de autenticação e download (`gdrive_auth.py`, `gdrive_download.py`) são em Python.
+    *   [Download Python](https://www.python.org/downloads/)
+    *   Certifique-se de que o Python e o pip estão no PATH do seu sistema.
+
+### Passo 1: Obter o Código do Projeto
+
+Clone o repositório do projeto para sua máquina local usando Git:
+```bash
+git clone <URL_DO_REPOSITORIO_DO_PROJETO>
+cd <NOME_DO_DIRETORIO_DO_PROJETO>
+```
+*Substitua `<URL_DO_REPOSITORIO_DO_PROJETO>` pela URL correta do repositório e `<NOME_DO_DIRETORIO_DO_PROJETO>` pelo nome da pasta que será criada.*
+
+### Passo 2: Configuração de Modelos para Inferência (API `app_recognizer`)
+
+A API de reconhecimento (`app_recognizer`) precisa de um arquivo de configuração (`config.yaml`) e um arquivo de pesos do modelo (`weights.pkl`). Você tem duas opções para fornecê-los:
+
+#### Opção A: Usando a Integração com Google Drive (Recomendado e Flexível)
+
+Esta abordagem permite que você gerencie seus modelos em uma pasta no Google Drive e os baixe quando necessário.
+
+1.  **Siga as instruções de Configuração Inicial do Google Drive:** Detalhadas na seção "[8. Gerenciamento de Dados com Google Drive](#8-gerenciamento-de-dados-com-google-drive)" desta documentação. Isso inclui:
+    *   Obter seu arquivo `gdrive_credentials.json` do Google Cloud Console.
+    *   Criar e preencher o arquivo `gdrive_config.json` na raiz do projeto (você pode usar a página "[Configurar Google Drive (JSON)](config_gdrive.md)" na documentação web para ajudar a gerar este JSON).
+    *   Executar `python gdrive_auth.py` para autorizar o acesso.
+
+2.  **Prepare seus Modelos no Google Drive:**
+    *   Na pasta do Google Drive que você configurou em `gdrive_config.json` (campo `google_drive_folder_url`), crie uma subpasta chamada `models`.
+    *   Dentro desta subpasta `models` no Google Drive, coloque os arquivos do modelo de inferência que você deseja usar. **É crucial que eles sejam nomeados exatamente `config.yaml` e `weights.pkl`** para que a configuração do Docker Compose funcione corretamente.
+
+3.  **Baixe os Modelos do Google Drive:**
+    No terminal, na raiz do projeto, execute:
+    ```bash
+    python gdrive_download.py --type models
+    ```
+    Este comando baixará os arquivos da pasta `models` do seu Google Drive para o diretório local especificado em `gdrive_config.json` (padrão: `./models_from_gdrive/`). Verifique se os arquivos `config.yaml` e `weights.pkl` estão presentes em `./models_from_gdrive/` após o download.
+
+#### Opção B: Configuração Manual dos Modelos
+
+Se você não deseja usar a integração com Google Drive ou prefere gerenciar os modelos localmente de forma manual:
+
+1.  Crie um diretório chamado `models_from_gdrive` na raiz do projeto (o nome é para manter a consistência com a configuração do Docker Compose).
+    ```bash
+    mkdir models_from_gdrive
+    ```
+2.  Copie o arquivo de configuração do seu modelo (formato `.yaml`) para dentro de `models_from_gdrive/` e **renomeie-o para `config.yaml`**.
+3.  Copie o arquivo de pesos do seu modelo (formato `.pkl`) para dentro de `models_from_gdrive/` e **renomeie-o para `weights.pkl`**.
+
+Após este passo, você deve ter a seguinte estrutura (seja via GDrive ou manual):
+```
+<raiz_do_projeto>/
+└── models_from_gdrive/
+    ├── config.yaml
+    └── weights.pkl
+```
+
+*(Nota sobre Datasets para Treinamento: Se você também planeja treinar modelos, o processo de obtenção de datasets via Google Drive ou manualmente é similar, usando `python gdrive_download.py --type datasets` ou colocando-os em um diretório local e ajustando os scripts `register_datasets.py` conforme detalhado na seção "8. Gerenciamento de Dados com Google Drive".)*
+
+### Passo 3: Construir e Executar os Serviços Docker
+
+Com os arquivos de modelo no lugar (`./models_from_gdrive/`), você pode construir as imagens Docker e iniciar os serviços (API da aplicação e documentação web).
+
+1.  **Construir as Imagens Docker:**
+    Este comando lê o `docker-compose.yml` e constrói as imagens para todos os serviços definidos nele (`app_recognizer` e `docsify_docs`). Pode levar alguns minutos na primeira vez, pois baixa as imagens base e instala dependências.
+    ```bash
+    docker-compose build
+    ```
+
+2.  **Iniciar os Serviços:**
+    Este comando inicia os containers em segundo plano (`-d` de "detached mode").
+    ```bash
+    docker-compose up -d
+    ```
+    Ambos os serviços (API e documentação) serão iniciados.
+
+### Passo 4: Acessar os Serviços
+
+Após os containers iniciarem com sucesso (pode levar alguns segundos):
+
+1.  **Documentação Web:**
+    *   Abra seu navegador e acesse: `http://localhost:8080`
+    *   Você verá a página da documentação do projeto, servida pelo Docsify.
+
+2.  **API da Aplicação de Reconhecimento:**
+    *   A API estará escutando em: `http://localhost:8000`
+    *   Você pode interagir com ela usando ferramentas como Postman, Insomnia, ou scripts (veja Passo 5).
+
+### Passo 5: Testar a API da Aplicação
+
+Consulte a seção "Testando a API da Aplicação Principal" dentro da "[7. Servindo a Documentação Web com Docker](#7-servindo-a-documentação-web-com-docker)" para exemplos de como enviar requisições para os endpoints (`/image`, `/url`, `/coordinates`).
+
+Lembre-se que a aplicação, por padrão, tentará fazer upload de algumas imagens para o Google Cloud Storage. Se você não configurou credenciais do Google Cloud para o ambiente Docker local, essas partes específicas podem falhar, mas o processamento da imagem e a resposta principal da API (detecções, GIF local) ainda devem funcionar.
+
+### Passo 6: Gerenciando os Serviços Docker
+
+*   **Visualizar Logs:** Para ver os logs de um serviço específico (útil para depuração):
+    ```bash
+    docker-compose logs app_recognizer
+    docker-compose logs docsify_docs
+    ```
+    Para seguir os logs em tempo real, adicione a flag `-f`:
+    ```bash
+    docker-compose logs -f app_recognizer
+    ```
+
+*   **Verificar Status dos Containers:**
+    ```bash
+    docker-compose ps
+    ```
+
+*   **Parar os Serviços:** Para parar e remover os containers definidos no `docker-compose.yml`:
+    ```bash
+    docker-compose down
+    ```
+    Se quiser apenas parar sem remover:
+    ```bash
+    docker-compose stop
+    ```
+
+### Considerações sobre Hardware, Desempenho e Plataformas
+
+*   **Uso de CPU para Inferência no Docker:** A configuração Docker atual para a API `app_recognizer` utiliza versões CPU do PyTorch e Detectron2. Isso garante que a aplicação funcione em uma ampla variedade de máquinas, mesmo aquelas sem uma GPU NVIDIA dedicada. No entanto, a inferência (processamento de imagens) será mais lenta do que seria em uma GPU.
+*   **Desempenho da CPU:** A velocidade do processamento de imagens na CPU dependerá do poder de processamento da CPU da sua máquina host.
+*   **Treinamento de Modelos com GPU:** Este manual foca na *implantação* da API e documentação via Docker. O processo de *treinamento* de novos modelos de IA não é executado dentro destes containers Docker. Se você deseja treinar modelos usando uma GPU NVIDIA, você precisará configurar um ambiente Python local separado com as versões GPU do PyTorch, Detectron2 e drivers CUDA apropriados.
+*   **Compatibilidade entre Windows e Linux:**
+    *   **Docker Desktop no Windows:** Recomenda-se usar o backend WSL 2 (Windows Subsystem for Linux 2) para Docker Desktop, pois oferece melhor performance e compatibilidade com containers Linux.
+    *   **Comandos:** Os comandos `docker-compose` são os mesmos em terminais Linux, PowerShell no Windows, ou terminais dentro do WSL2.
+    *   **Caminhos de Arquivo:** O Docker Compose e o Docker Desktop (com WSL2) geralmente lidam bem com a tradução de caminhos de arquivo entre o sistema operacional host (Windows) e os containers Linux. Os caminhos relativos usados no `docker-compose.yml` (ex: `./models_from_gdrive/`) devem funcionar corretamente.
+
+Seguindo este manual, você deverá ser capaz de implantar e executar todo o sistema Juiz de Bocha Eletrônico em seu ambiente local.
