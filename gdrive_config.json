@@ -1,0 +1,5 @@
+{
+  "google_drive_folder_url": "COLE_A_URL_DA_PASTA_RAIZ_DO_GOOGLE_DRIVE_AQUI",
+  "local_datasets_path": "./datasets_from_gdrive",
+  "local_models_path": "./models_from_gdrive"
+}

@@ -1,0 +1,56 @@
+version: '3.8' # Especifica a versão do formato do arquivo Docker Compose
+
+services:
+  docsify_docs:
+    build:
+      context: ./docs-server # O diretório onde o Dockerfile está localizado
+      dockerfile: Dockerfile
+    container_name: juiz_de_bocha_docs # Nome amigável para o container
+    ports:
+      - "8080:80" # Mapeia a porta 8080 do host para a porta 80 do container (onde o Nginx escuta)
+    restart: unless-stopped # Política de reinício: reinicia o container a menos que seja parado manualmente
+    volumes:
+      # Para desenvolvimento: montar os arquivos de documentação diretamente no container
+      # Isso permite ver as alterações ao vivo sem reconstruir a imagem.
+      # Para produção, você pode comentar esta seção de volumes para usar os arquivos copiados no Dockerfile.
+      - ./DOCUMENTACAO.md:/usr/share/nginx/html/DOCUMENTACAO.md:ro
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./_sidebar.md:/usr/share/nginx/html/_sidebar.md:ro
+    labels:
+      - "description=Serviço de documentação do Juiz de Bocha Eletrônico via Docsify e Nginx"
+      - "project=JuizDeBocha"
+
+  app_recognizer:
+    build:
+      context: ./cloud-run-function
+      dockerfile: Dockerfile
+    container_name: juiz_de_bocha_app
+    ports:
+      - "8000:8000" # Mapeia a porta 8000 do host para a porta 8000 do container
+    environment:
+      - PORT=8000 # Define a variável de ambiente PORT que o gunicorn e o main.py esperam
+      # - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp_creds.json # Exemplo se credenciais fossem montadas
+    volumes:
+      # Monta o código da aplicação para permitir live-reload durante o desenvolvimento
+      - ./cloud-run-function:/app:ro
+      # Monta os arquivos de modelo específicos nos locais esperados pela aplicação (main.py)
+      # Assumindo que main.py será ajustado para ler 'weights.pkl'
+      - ./models_from_gdrive/config.yaml:/app/models/model/config.yaml:ro
+      - ./models_from_gdrive/weights.pkl:/app/models/model/weights.pkl:ro
+      # Monta o arquivo de configuração da aplicação e a chave da conta de serviço do Google Drive
+      - ./cloud-run-function/app_settings.json:/app/app_settings.json:ro
+      - ./gdrive_service_account.json:/app/gdrive_service_account.json:ro
+      # Volumes para armazenamento local de arquivos gerados e raw (se output_storage_type for 'local')
+      - ./app_generated_files:/app/output/generated_files
+      - ./app_raw_files:/app/output/raw_files
+      # Se você tivesse um arquivo .pth e não fosse alterar main.py:
+      # - ./path_to_your_model_on_host/model_final.pth:/app/models/model/model_final.pth:ro
+    restart: unless-stopped
+    labels:
+      - "description=Serviço de reconhecimento de bocha Juiz de Bocha Eletrônico"
+      - "project=JuizDeBocha"
+
+# Informações adicionais (opcional)
+# networks:
+#   default:
+#     name: juizdebocha_network

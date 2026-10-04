@@ -1,0 +1,13 @@
+- **Menu Principal**
+  - [Visão Geral do Projeto](DOCUMENTACAO.md#1-visão-geral-do-projeto)
+  - [Configuração do Ambiente](DOCUMENTACAO.md#2-configuração-do-ambiente-de-desenvolvimento)
+  - [O Reconhecedor (`recognizer.py`)](DOCUMENTACAO.md#3-o-reconhecedor-recognizerpy)
+  - [Treinamento de Modelos](DOCUMENTACAO.md#4-treinamento-de-modelos)
+  - [Servindo com Cloud Run](DOCUMENTACAO.md#5-servindo-o-modelo-com-google-cloud-run-cloud-run-function)
+  - [Estrutura de Diretórios](DOCUMENTACAO.md#6-estrutura-de-diretórios-do-projeto)
+  - [Servindo a Documentação Web com Docker](DOCUMENTACAO.md#7-servindo-a-documentação-web-com-docker)
+  - [Gerenciamento de Dados com Google Drive](DOCUMENTACAO.md#8-gerenciamento-de-dados-com-google-drive)
+  - [9. Manual de Implantação](DOCUMENTACAO.md#9-manual-de-implantação-com-docker)
+  - [10. Manual API Flutter](DOCUMENTACAO.md#10-manual-de-uso-da-api-com-flutter)
+  - [11. Manual de Treinamento](DOCUMENTACAO.md#11-manual-de-treinamento-de-modelos-de-detecção-de-bocha)
+  - [Configurar Google Drive (JSON)](config_gdrive.md)
