@@ -21,3 +21,12 @@ gcf-function/model/
 
 cloud-run-function/recognizer.py
 cloud-run-function/models/
+
+# Credenciais e dados locais do Google Drive / Docker (nunca versionar)
+gdrive_service_account.json
+gdrive_credentials.json
+gdrive_token.json
+models_from_gdrive/
+app_generated_files/
+app_raw_files/
+datasets_gdrive/

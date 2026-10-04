@@ -85,150 +85,322 @@ def _two_centers_distance(ca, cb):
         math.pow(cb['y'] - ca['y'], 2)
     )
 
+
 def gaussian_kernel(l=5, sig=1.):
+    """\
+    creates gaussian kernel with side length `l` and a sigma of `sig`
+    """
     ax = np.linspace(-(l - 1) / 2., (l - 1) / 2., l)
     gauss = np.exp(-0.5 * np.square(ax) / np.square(sig))
     kernel = np.outer(gauss, gauss)
     return kernel / np.sum(kernel)
 
+
 def __read_image(img_bytes):
     return _rec.read_file(io.BytesIO(img_bytes))
+
 
 def __process_balls(img):
     instances = _rec.predict_data(img)
     instances = list(filter(lambda i: i['class'] == 'sports ball', instances))
     balls, smallest, winner = [], None, None
+    # print("n instances:", len(instances))
     if len(instances) >= 2:
         in_walls = []
         in_middle = []
         margin = 0.10
-        x_min = img.shape[1] * margin; x_max = img.shape[1] * (1-margin)
-        y_min = img.shape[0] * margin; y_max = img.shape[0] * (1-margin)
+        x_min = img.shape[1] * margin
+        x_max = img.shape[1] * (1-margin)
+        y_min = img.shape[0] * margin
+        y_max = img.shape[0] * (1-margin)
         for instance in instances:
             in_horizontal_middle = (x_min <= instance['center']['x'] <= x_max)
             in_vertical_middle = (y_min <= instance['center']['y'] <= y_max)
-            if in_horizontal_middle and in_vertical_middle: in_middle.append(instance)
-            else: in_walls.append(instance)
+            if in_horizontal_middle and in_vertical_middle:
+                in_middle.append(instance)
+            else:
+                in_walls.append(instance)
         if len(in_middle) > 0:
             in_middle.sort(key=lambda i: i['area'])
-            while True: # Find balim (smallest in middle)
-                if not in_middle: smallest = None; break
-                smallest = in_middle.pop(0)
-                if not in_middle: break # Only one ball in middle, it's the balim
-                # Heuristic: balim should not be drastically smaller than other balls in middle
-                largest_area = max(b['area'] for b in in_middle) if in_middle else smallest['area']
-                ratio_to_largest = largest_area / smallest['area'] if smallest['area'] > 0 else float('inf')
-                if ratio_to_largest < 4: break # Acceptable balim size relative to others
-                # If very small, assume dirt and try next
-            if smallest:
-                for i in reversed(range(len(in_walls))): # Clean dirt from walls
-                    if in_walls[i]['area'] < smallest['area'] / 2: del in_walls[i]
-            balls = in_middle + in_walls # All remaining balls
-            if smallest and balls: # If balim and other balls exist
-                for ball in balls:
-                    ball['distance'] = _two_centers_distance(smallest['center'], ball['center'])
+            # get balim
+            while True:
+                smallest = in_middle[0]
+                del in_middle[0]
+                if len(in_middle) >= 1:
+                    # check if its too small, then, is probably dirt
+                    largest_area = in_middle[-1]['area']
+                    next_area = in_middle[0]['area']
+                    ratio_to_larger = largest_area / smallest['area']
+                    ratio_to_next = next_area / smallest['area']
+                    # print("rate difference:")
+                    # print(ratio_to_larger)
+                    # print(ratio_to_next)
+                    # print(ratio_to_larger - ratio_to_next)
+                    # print(math.fabs(ratio_to_larger - ratio_to_next))
+                    if math.fabs(ratio_to_larger - ratio_to_next) > 1.5:
+                        del smallest
+                    else:
+                        # is viable
+                        break
+                else:
+                    # too few balls to analyse
+                    break
+            # remove walls dirt (smaller than balim)
+            for i in reversed(range(len(in_walls))):
+                ball: dict = in_walls[i]
+                if ball['area'] < smallest['area']/2:
+                    del in_walls[i]
+            balls = in_middle + in_walls
+            if len(balls) >= 1:
+                for i in range(len(balls)):
+                    balls[i]['distance'] = _two_centers_distance(smallest['center'], balls[i]['center'])
                 balls.sort(key=lambda b: b['distance'])
                 winner = balls[0]
     return balls, winner, smallest
 
 
 def __draw_circle(clean_img, img, instance, color, margin=10, stroke=None):
-    if stroke is None: stroke = max(img.shape[0], img.shape[1]) * 0.005
-    c = int(instance['center']['x']); r = int(instance['center']['y'])
+    if stroke is None:
+        stroke = max(img.shape[0], img.shape[1]) * 0.005
+    c = int(instance['center']['x'])
+    r = int(instance['center']['y'])
     c_radius = (instance['box']['x2'] - instance['box']['x1'])/2
     r_radius = (instance['box']['y2'] - instance['box']['y1'])/2
-    rr, cc = skimage.draw.ellipse(r, c, int(r_radius + margin + stroke), int(c_radius + margin + stroke), shape=img.shape)
+    # outer
+    rr, cc = skimage.draw.ellipse(
+        r, c,
+        int(r_radius + margin + stroke),
+        int(c_radius + margin + stroke),
+        shape=img.shape,
+    )
     img[rr, cc] = color
-    rr, cc = skimage.draw.ellipse(r, c, int(r_radius + margin), int(c_radius + margin), shape=img.shape)
+    # inner
+    rr, cc = skimage.draw.ellipse(
+        r, c,
+        int(r_radius + margin),
+        int(c_radius + margin),
+        shape=img.shape
+    )
     img[rr, cc] = clean_img[rr, cc]
+
 
 def _process_image(img_bytes, create_thumbnail=False):
     img = __read_image(img_bytes)
     balls, winner, smallest = __process_balls(img)
+    # grid
+    # if smallest:
+    #     width = int(smallest['box']['x2'] - smallest['box']['x1']) +1
+    #     height = int(smallest['box']['y2'] - smallest['box']['y1']) +1
+    #     grid_color = np.array([80, 80, 80], dtype=np.uint8)
+    #     for direction in [-1, 1]:
+    #         x = int(smallest['box']['x1'])
+    #         while 0 < x < img.shape[1]:
+    #             img[:, x-1:x] = grid_color
+    #             x += direction * width
+    #         y = int(smallest['box']['y1'])
+    #         while 0 < y < img.shape[0]:
+    #             img[y-1:y, :] = grid_color
+    #             y += direction * height
+    #         # y = int(smallest['box']['y1'])
+    #     # i, j = 0, 0
     img_winner = img.copy()
-
-    # Recolor non-winner balls first
-    non_winner_balls = [b for b in balls if not (winner and b['center'] == winner['center'])]
-    if smallest and not (winner and smallest['center'] == winner['center']): # if smallest is not the winner, ensure it's in the list to be colored
-        is_smallest_in_list = any(b['center'] == smallest['center'] for b in non_winner_balls)
-        if not is_smallest_in_list:
-             non_winner_balls.append(smallest)
-
-
-    for ball_data in reversed(non_winner_balls): # Reversed to draw smaller balls first if overlapping
-        if ball_data and 'mask' in ball_data:
-            colors = img[ball_data['mask']]
-            if colors.size > 0:
-                avg_color = np.array(colors.mean(axis=0), dtype=np.uint8)
-                img[ball_data['mask']] = avg_color
-                img_winner[ball_data['mask']] = avg_color
-
+    for i, ball in reversed(list(enumerate(balls))):
+        colors = img[ball.get('mask')]
+        avg_color = np.array(colors.mean(axis=0), dtype=np.uint8)
+        img[ball.get('mask')] = avg_color
+        if i != 0:
+            img_winner[ball.get('mask')] = avg_color
     green = np.array([50, 230, 50], dtype=np.uint8)
-    if winner and 'mask' in winner:
-        __draw_circle(img.copy(), img_winner, instance=winner, color=green) # Draw circle on img_winner
+    if winner:
+        __draw_circle(
+            img,
+            img_winner,
+            instance=winner,
+            color=green,
+        )
+        # c = int(winner['center']['x'])
+        # r = int(winner['center']['y'])
+        # c_radius = int(winner['box']['x2']-winner['box']['x1'])
+        # r_radius = int(winner['box']['y2']-winner['box']['y1'])
+        # shape = img.shape
+        # # outer
+        # margin = 8
+        # rr, cc = skimage.draw.ellipse(
+        #     r, c,
+        #     r_radius-margin,
+        #     c_radius-margin,
+        #     shape=shape
+        # )
+        # img_winner[rr, cc] = np.array([50, 230, 50], dtype=np.uint8)
+        # # inner
+        # stroke = max(img.shape[0], img.shape[1]) * 0.007
+        # rr, cc = skimage.draw.ellipse(
+        #     r, c,
+        #     r_radius-margin-stroke,
+        #     c_radius-margin-stroke,
+        #     shape=shape
+        # )
+        # img_winner[rr, cc] = img[rr, cc]
 
-    if smallest and 'mask' in smallest:
-        margin_s = 0
-        stroke_s = max(img.shape[0], img.shape[1]) * 0.0022
-        # Crosshair
-        rr_v, cc_v = skimage.draw.rectangle(start=(max(int(smallest['box']['y1']-margin_s),0), max(int(smallest['center']['x']-stroke_s/2),0)), end=(min(int(smallest['box']['y2']+margin_s),img.shape[0]-1), min(int(smallest['center']['x']+stroke_s/2),img.shape[1]-1)))
-        rr_h, cc_h = skimage.draw.rectangle(start=(max(int(smallest['center']['y']-stroke_s/2),0), max(int(smallest['box']['x1']-margin_s),0)), end=(min(int(smallest['center']['y']+stroke_s/2),img.shape[0]-1), min(int(smallest['box']['x2']+margin_s),img.shape[1]-1)))
-        for arr in [img, img_winner]:
-            arr[rr_v, cc_v] = green
-            arr[rr_h, cc_h] = green
-        # Circle
-        __draw_circle(img.copy(), img, instance=smallest, color=green, margin=margin_s, stroke=stroke_s)
-        __draw_circle(img_winner.copy(), img_winner, instance=smallest, color=green, margin=margin_s, stroke=stroke_s)
+    # smaller
+    if smallest:
+        margin = 0
+        stroke = max(img.shape[0], img.shape[1]) * 0.0022
+        # vertical line
+        rr, cc = skimage.draw.rectangle(
+            start=(
+                max(int(smallest['box']['y1']-margin), 0),
+                max(int(smallest['center']['x']-stroke/2), 0),
+            ),
+            end=(
+                min(int(smallest['box']['y2']+margin), img.shape[0]-1),
+                min(int(smallest['center']['x']+stroke/2), img.shape[1]-1),
+            ),
+        )
+        img[rr, cc] = green
+        img_winner[rr, cc] = green
+        # horizontal line
+        rr, cc = skimage.draw.rectangle(
+            start=(
+                max(int(smallest['center']['y']-stroke/2.), 0),
+                max(int(smallest['box']['x1']-margin), 0),
+            ),
+            end=(
+                min(int(smallest['center']['y']+stroke/2.), img.shape[0]-1),
+                min(int(smallest['box']['x2']+margin), img.shape[1]-1),
+            ),
+        )
+        img[rr, cc] = green
+        img_winner[rr, cc] = green
+        # circle
+        __draw_circle(
+            img,
+            img_winner,
+            instance=smallest,
+            color=green,
+            margin=margin,
+            stroke=stroke,
+        )
+        __draw_circle(
+            img.copy(),
+            img,
+            instance=smallest,
+            color=green,
+            margin=margin,
+            stroke=stroke,
+        )
+        # img[smallest.get('mask')] = np.array([255, 255, 255], dtype=np.uint8)
 
+    # circulo na cor média da bola e piscando em verde
+    # for i in reversed(range(len(balls))):
+    #     colors = img[balls[i].get('mask')]
+    #     avg_color = colors.mean(axis=0)
+    #     img[balls[i].get('mask')] = np.array(avg_color, dtype=np.uint8)
+    # if winner:
+    #     img[winner.get('mask')] = np.array([50, 230, 50], dtype=np.uint8)
+        # border = winner.get('mask')
+        # dilated = ndimage.binary_dilation(border, gaussian_kernel(10))
+        # eroded = ndimage.binary_erosion(border, gaussian_kernel(5))
+        # border = dilated ^ eroded
+        # border = ndimage.binary_dilation(border, gaussian_kernel(5, 0.5))
+        # img[border] = np.array([100, 220, 100], dtype=np.uint8)
     if create_thumbnail:
+        # resize/reduce based on smaller axis factor of original image
         axis = int(np.argmin(img_winner.shape[:2]))
         factor = img_winner.shape[axis] / __thumbnail_size[axis]
-        thumbnail_pil = Image.fromarray(img_winner)
-        thumbnail_pil = thumbnail_pil.resize(size=(int(img_winner.shape[1] / factor), int(img_winner.shape[0] / factor)))
-        thumbnail = np.array(thumbnail_pil)
+        thumbnail = Image.fromarray(img_winner)
+        thumbnail = thumbnail.resize(
+            size=(
+                int(img_winner.shape[1] / factor),  # width
+                int(img_winner.shape[0] / factor),  # height
+            )
+        )
+        thumbnail = np.array(thumbnail)
+        # cut larger axis to fit target size, with smaler ball in the center
         cross_axis = (axis+1) % 2
         center = int(thumbnail.shape[cross_axis] / 2)
-        if smallest: center = int(smallest['center'][('y','x')[cross_axis]] / factor)
-        size_on_cross_axis = __thumbnail_size[cross_axis]
-        start = max(0, center - int(size_on_cross_axis / 2))
-        end = start + size_on_cross_axis
-        if end > thumbnail.shape[cross_axis]:
-            end = thumbnail.shape[cross_axis]
-            start = max(0, end - size_on_cross_axis)
-        if cross_axis == 0: thumbnail = thumbnail[start:end, :]
-        else: thumbnail = thumbnail[:, start:end]
+        if smallest is not None:
+            center = int(smallest['center'][('y', 'x')[cross_axis]])
+        center = int(center / factor)
+        size = __thumbnail_size[cross_axis]
+        start = center - int(size / 2)
+        # guarantee that is after image start
+        if start < 0:
+            start = 0
+            end = size
+        else:
+            end = start + size
+            # guarantee that is before image end
+            if end > thumbnail.shape[cross_axis]:
+                end = thumbnail.shape[cross_axis]
+                start = end - size
+        if cross_axis == 0:
+            thumbnail = thumbnail[start:end, :]
+        else:
+            thumbnail = thumbnail[:, start:end]
         return thumbnail, (img, img_winner)
     return img, img_winner
 
-__counter = random.randint(1,10000)
+
+__counter = random.randint(1, 10000)
+
+
 def _create_filename():
-    global __counter; __counter +=1
+    global __counter
+    __counter += 1
     return f"{datetime.now().timestamp()}.{__counter}"
 
-max_shape = (1200, 1200) # Max GIF dimensions
+
+max_shape = (10000, 9000)
+
+
 def _to_gif_bytes(images):
-    gif_bytes = io.BytesIO(); base, winner = images; frames = []
-    p=0.0; new_size=None
-    h,w = base.shape[:2]
-    if h > max_shape[0] or w > max_shape[1]:
-        if h/max_shape[0] > w/max_shape[1]: factor = max_shape[0]/h
-        else: factor = max_shape[1]/w
-        new_size=(int(w*factor), int(h*factor))
-    for step in [0.25,-0.25]:
-        for _ in range(int(math.fabs(1.0//step))):
-            frame_np = np.array(base*(1-p)+winner*p,dtype=np.uint8)
-            frame_pil = Image.fromarray(frame_np)
-            if new_size: frame_pil = frame_pil.resize(new_size, Image.Resampling.LANCZOS)
-            frames.append(frame_pil)
-            p+=step
-    if frames: frames[0].save(gif_bytes,format='gif',append_images=frames[1:],save_all=True,duration=100,loop=0,optimize=True)
+    gif_bytes = io.BytesIO()
+    base, winner = images
+    frames = []
+    p = 0.0
+    new_size = None
+    if base.shape[0] > base.shape[1] and base.shape[0] > max_shape[0]:  # portrait
+        factor = max_shape[0] / base.shape[0]
+        new_size = (
+            int(base.shape[1] * factor),  # x
+            max_shape[0],  # y
+        )
+    elif base.shape[1] > max_shape[1]:  # landscape
+        factor = max_shape[1] / base.shape[1]
+        new_size = (
+            max_shape[1],  # x
+            int(base.shape[0] * factor),  # y
+        )
+    for step in [0.25, -0.25]:
+        for i in range(int(math.fabs(1.0//step))):
+            frame = np.array(base * (1-p) + winner * p, dtype=np.uint8)
+            frame = Image.fromarray(frame)
+            if new_size is not None:
+                frame = frame.resize(new_size)
+            frames.append(frame)
+            p += step
+    frames[0].save(
+        gif_bytes,
+        format='gif',
+        append_images=frames[1:],
+        save_all=True,
+        duration=100,
+        optimize=True,
+        loop=0,
+        minimize_size=True,
+        allow_mixed=True,
+    )
     return gif_bytes.getvalue()
 
-def _to_bytes(im, format='jpeg'):
-    img_pil = Image.fromarray(im); img_bytes = io.BytesIO()
-    img_pil.save(img_bytes, format=format.upper()); return img_bytes.getvalue()
 
-# --- Funções de Armazenamento de Arquivos ---
+def _to_bytes(im, format='jpeg'):
+    img = Image.fromarray(im)
+    img_bytes = io.BytesIO()
+    img.save(img_bytes, format=format)
+    return img_bytes.getvalue()
+
+
 def _save_file_locally(filename_on_disk, file_bytes, storage_folder_path):
     try:
         full_path = os.path.join(storage_folder_path, filename_on_disk)
@@ -310,7 +482,7 @@ def process_image_return_image():
     if with_thumbnail and thumbnail_bytes:
         return dict(thumbnail=base64.encodebytes(thumbnail_bytes).decode('utf-8'), gif=base64.encodebytes(gif_bytes).decode('utf-8'))
     else:
-        return send_file(io.BytesIO(gif_bytes), download_name=filename_base + '.gif', mimetype='image/gif', as_attachment=True)
+        return send_file(io.BytesIO(gif_bytes), download_name='response.gif', mimetype='image/gif', as_attachment=True)
 
 @app.route('/url', methods=['POST'])
 def process_image_return_url():
@@ -342,45 +514,31 @@ def process_image_return_coordinates():
     filename_base = _create_filename()
     user_id_param = request.args.get('userID')
 
-    original_file_ref = _handle_file_output(filename_base + '_original.jpg', img_bytes, 'image/jpeg', 'raw', user_id=user_id_param)
+    if (OUTPUT_STORAGE_TYPE == 'gdrive' and ALLOW_GDRIVE_RAW_UPLOAD) or \
+       (OUTPUT_STORAGE_TYPE == 'local'):
+        _handle_file_output(filename_base + '.jpg', img_bytes, 'image/jpeg', 'raw', user_id=user_id_param)
 
-    img_np = __read_image(img_bytes)
-    balls_list, winner_ball, smallest_ball = __process_balls(img_np) # Renomeado para evitar conflito com a lista 'balls' abaixo
-
-    response_data_balls = []
-    if smallest_ball:
-        response_data_balls.append({**smallest_ball, 'is_balim': True, 'is_winner': (winner_ball and smallest_ball['center'] == winner_ball['center'])})
-
-    if winner_ball and (not smallest_ball or smallest_ball['center'] != winner_ball['center']):
-        response_data_balls.append({**winner_ball, 'is_balim': False, 'is_winner': True})
-
-    processed_ids = {b['id'] for b in response_data_balls if 'id' in b} if smallest_ball or winner_ball else set() # IDs já adicionados
-
-    for ball_item in balls_list: # balls_list é a lista de bolas ordenadas por distância ao bolim (se bolim existe)
-        if ball_item['id'] not in processed_ids:
-            response_data_balls.append({**ball_item, 'is_balim': False, 'is_winner': False})
-            processed_ids.add(ball_item['id'])
-
-
-    processed_ball_data_final = []
-    for ball_data in response_data_balls:
-        processed_ball_data_final.append({
-            'center': {'x': ball_data['center']['x'] / img_np.shape[1], 'y': ball_data['center']['y'] / img_np.shape[0]},
-            'ellipse': {'width': (ball_data['box']['x2'] - ball_data['box']['x1']) / img_np.shape[1], 'height': (ball_data['box']['y2'] - ball_data['box']['y1']) / img_np.shape[0]},
-            'is_balim': ball_data.get('is_balim', False),
-            'is_winner': ball_data.get('is_winner', False),
-            'score': ball_data.get('score', 0.0) # Adicionar score se disponível
-        })
-
-    # Garantir que 'smallest' e 'winner' na resposta sejam os objetos corretos ou null
-    final_smallest = next((b for b in processed_ball_data_final if b['is_balim']), None)
-    final_winner = next((b for b in processed_ball_data_final if b['is_winner']), None)
-
+    img = __read_image(img_bytes)
+    balls, winner, smallest = __process_balls(img)
+    # 'url' mantém o nome do contrato original; no armazenamento Drive/local é a referência do arquivo salvo
+    url = _handle_file_output(filename_base + '.jpg', img_bytes, 'image/jpeg', 'generated', user_id=user_id_param)
+    balls = [smallest, *balls]
+    for i, ball in enumerate(balls):
+        balls[i] = {
+            'center': {
+                'x': ball['center']['x'] / img.shape[1],
+                'y': ball['center']['y'] / img.shape[0],
+            },
+            'ellipse': {
+                'width': (ball['box']['x2'] - ball['box']['x1']) / img.shape[1],
+                'height': (ball['box']['y2'] - ball['box']['y1']) / img.shape[0],
+            },
+        }
     return {
-        'file_reference': original_file_ref or "upload_original_failed",
-        'smallest': final_smallest,
-        'winner': final_winner,
-        'balls': processed_ball_data_final
+        'url': url,
+        'smallest': balls[0],
+        'winner': balls[1],
+        'balls': balls[2:],
     }
 
 if __name__ == "__main__":
