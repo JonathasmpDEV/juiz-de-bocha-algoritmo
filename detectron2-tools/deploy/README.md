@@ -1,3 +1,5 @@
+> **Nota (neste repositório):** esta pasta é uma cópia do exemplo de deploy do Detectron2 (`export_model.py`, `torchscript_mask_rcnn.cpp`, `CMakeLists.txt`). Os caminhos `../../configs/...` e `../../docker/deploy.Dockerfile` citados abaixo vêm do repositório original do Detectron2 e **não existem aqui**; use os YAML de [`../../models/`](../../models/) (por exemplo `models/mask_rcnn_R_50_FPN_3x/mask_rcnn_R_50_FPN_3x.yaml`, que herda de `models/Base-RCNN-FPN.yaml`) ou o [Dockerfile do Detectron2 original](https://github.com/facebookresearch/detectron2/blob/main/docker/deploy.Dockerfile). Esta pasta não é usada pela API (`cloud-run-function/`).
+
 See [deployment tutorial](https://detectron2.readthedocs.io/tutorials/deployment.html)
 for some high-level background about deployment.
 
