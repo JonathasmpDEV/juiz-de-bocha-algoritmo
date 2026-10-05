@@ -3,8 +3,8 @@ version: '3.8' # Especifica a versão do formato do arquivo Docker Compose
 services:
   docsify_docs:
     build:
-      context: ./docs-server # O diretório onde o Dockerfile está localizado
-      dockerfile: Dockerfile
+      context: . # raiz do repositório: o Dockerfile copia DOCUMENTACAO.md, index.html e _sidebar.md da raiz
+      dockerfile: docs-server/Dockerfile
     container_name: juiz_de_bocha_docs # Nome amigável para o container
     ports:
       - "8080:80" # Mapeia a porta 8080 do host para a porta 80 do container (onde o Nginx escuta)

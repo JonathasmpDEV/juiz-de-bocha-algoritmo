@@ -63,7 +63,7 @@ Todos são `POST` e esperam os **bytes da imagem** no corpo (não é multipart).
 |---|---|
 | `/image` | GIF animado (anexo). Com `with-thumbnail`: JSON `{thumbnail, gif}` em base64. |
 | `/url` | Referência (caminho local ou `webViewLink` do Drive) do GIF gerado. Com `with-thumbnail`: JSON `{thumbnail, animated}`. |
-| `/coordinates` | JSON `{file_reference, smallest, winner, balls}`; cada bola traz `center` (x, y normalizados 0–1), `ellipse` (width, height normalizados), `is_balim`, `is_winner`, `score`. |
+| `/coordinates` | JSON `{url, smallest, winner, balls}` (contrato original): `url` é a referência do arquivo salvo (Drive/local); `smallest` é o bolim, `winner` a bola vencedora e `balls` as demais; cada item traz `center` (x, y normalizados 0–1) e `ellipse` (width, height normalizados). |
 
 ```bash
 curl -X POST --data-binary "@foto.jpg" "http://localhost:8080/coordinates"
