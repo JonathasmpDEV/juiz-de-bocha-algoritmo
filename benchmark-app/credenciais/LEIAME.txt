@@ -1,0 +1,2 @@
+Coloque aqui firebase-admin.json (Firebase Console > Configuracoes > Contas de servico > Gerar nova chave privada).
+Esta pasta e ignorada pelo git; so este LEIAME e versionado.
