@@ -90,3 +90,10 @@ Ver [`cloud-run-function/README.MD`](cloud-run-function/README.MD) (`gcloud run 
 ## Treinamento
 
 Ver [`train/README.MD`](train/README.MD).
+
+## Treino no Colab e benchmark
+
+- `colab/` — notebooks de treino (`JuizDeBocha_Treino`), teste visual (`JuizDeBocha_Teste`) e benchmark de modelos/GPUs
+  (`JuizDeBocha_Experimentos`). Abra pelo link `https://colab.research.google.com/github/JonathasmpDEV/juiz-de-bocha-algoritmo/blob/main/colab/<notebook>.ipynb`.
+- `benchmark-app/` — app local para comparar os treinos e exportar os dados (veja o README da pasta).
+- `AGENTS.md` — contexto e estado atual do projeto para assistentes de código.

@@ -1,0 +1,9 @@
+# segredos e dados locais — nunca versionar
+.env
+credenciais/*
+dados/
+exportacoes/
+.venv/
+__pycache__/
+# relatorios/ É versionado (relatorio.json de cada experimento); o banco é reconstruído a partir dele
+!credenciais/LEIAME.txt

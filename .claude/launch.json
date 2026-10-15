@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "benchmark",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "--directory", "benchmark-app", "streamlit", "run", "app.py", "--server.port", "8501", "--server.headless", "true", "--server.address", "localhost", "--browser.gatherUsageStats", "false"],
+      "port": 8501
+    }
+  ]
+}
